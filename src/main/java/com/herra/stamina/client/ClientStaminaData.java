@@ -259,7 +259,7 @@ public final class ClientStaminaData {
     // ------------------------------------------------------------------ 生态桥
 
     static {
-        // 把插值显示值暴露给其他客户端 HERRA 模组（GWO 枪械 HUD 等），
+        // 把插值显示值暴露给其他客户端模组（GWO 枪械 HUD 等），
         // 它们通过 StaminaAPI.getRatio(player) 等方法读取。
         StaminaAPI.installClientDisplay(new ClientDisplayBridge() {
             @Override

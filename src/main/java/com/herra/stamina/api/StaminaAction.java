@@ -1,7 +1,7 @@
 package com.herra.stamina.api;
 
 /**
- * 体力变化的来源标识。传给消耗规则修改器与事件，HERRA 生态模组可对
+ * 体力变化的来源标识。传给消耗规则修改器与事件，生态模组可对
  * 不同来源做差异化处理（如重甲加大疾跑消耗、外骨骼减免跳跃消耗）。
  */
 public enum StaminaAction {

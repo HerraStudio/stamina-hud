@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /**
  * Registry of runtime data attachments. Deliberately NOT persistent:
  * stamina resets to full on login/respawn, which is the desired
- * raid-based behavior for HERRA.
+ * raid-based behavior for extraction-shooter gameplay.
  */
 public final class ModAttachments {
 

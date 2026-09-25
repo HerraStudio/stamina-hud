@@ -35,7 +35,7 @@
   "herra_stamina.screen.toggle.hide": "Auto hide",
 
   "herra_stamina.command.menu.opening": "Opening stamina settings... (changes only apply to you)",
-  "herra_stamina.command.help.header": "---- HERRA Stamina Commands ----",
+  "herra_stamina.command.help.header": "---- Stamina Commands ----",
   "herra_stamina.command.help.menu": "/sta - Open the settings screen (position / style / sound)",
   "herra_stamina.command.help.self": "/stamina - View your own stamina",
   "herra_stamina.command.help.admin": "/sta help - Show this help",

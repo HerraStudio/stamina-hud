@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * HERRA 生态的公开入口 —— 其他模组需要的一切都在这里：
+ * 生态联动的公开入口 —— 其他模组需要的一切都在这里：
  * 读体力、付自定义消耗、改写消耗规则、响应透支/回气、判定能否疾跑。
  *
  * <p>本模组自身从不调用 GWO 枪械 / 淘汰播报 / 战局系统 —— 集成是单向的，

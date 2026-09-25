@@ -3,7 +3,7 @@ package com.herra.stamina.api;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Lets other HERRA mods rewrite stamina costs without touching this mod's
+ * Lets other mods rewrite stamina costs without touching this mod's
  * internals - e.g. heavy armor increases sprint drain, an exoskeleton
  * reduces it, GWO weapon handling adds a jump penalty while overweight.
  *

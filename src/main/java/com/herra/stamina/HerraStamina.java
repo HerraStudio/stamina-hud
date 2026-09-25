@@ -17,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * HERRA Stamina —— 搜打撤服务器的独立体力系统（NeoForge 1.21.1）。
+ * Stamina —— 搜打撤服务器的独立体力系统（NeoForge 1.21.1）。
  *
  * <p>单一职责：只做体力条。不与 GWO 枪械、淘汰播报、战局系统硬耦合；
  * 生态模组通过 {@code com.herra.stamina.api}（StaminaAPI / 事件 /
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 public class HerraStamina {
 
     public static final String MOD_ID = "herra_stamina";
-    public static final Logger LOGGER = LoggerFactory.getLogger("HERRAStamina");
+    public static final Logger LOGGER = LoggerFactory.getLogger("Stamina");
 
     public HerraStamina(IEventBus modBus, ModContainer container) {
         ModAttachments.ATTACHMENT_TYPES.register(modBus);
@@ -44,7 +44,7 @@ public class HerraStamina {
         NeoForge.EVENT_BUS.register(StaminaGameEvents.class);
         NeoForge.EVENT_BUS.register(StaminaCommands.class);
 
-        LOGGER.info("HERRA Stamina 已加载，体力系统就绪。");
+        LOGGER.info("Stamina 已加载，体力系统就绪。");
     }
 
     public static ResourceLocation id(String path) {

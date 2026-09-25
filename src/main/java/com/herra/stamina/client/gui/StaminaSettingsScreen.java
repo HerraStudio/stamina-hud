@@ -29,7 +29,7 @@ import java.util.function.Function;
  * </ul>
  *
  * <p>修改即时生效（HUD 同帧可见），关闭界面时自动写回
- * {@code config/herra-stamina-client.toml}。</p>
+ * {@code config/herra_stamina-client.toml}。</p>
  *
  * <p>视觉语言：暗色军规面板 + 琥珀强调 + 扫描线 + 角落括号，全部代码绘制，
  * 不依赖贴图，与 MC 像素字体天然契合。</p>
@@ -85,7 +85,7 @@ public class StaminaSettingsScreen extends Screen {
     private static final int COL_TRACK_EDGE = 0xFF232B36;
     private static final int COL_MAP_BG = 0xFF0C1016;
 
-    private static final Component TITLE_BRAND = Component.literal("HERRA // STAMINA");
+    private static final Component TITLE_BRAND = Component.literal("STAMINA // SETTINGS");
 
     // ---- 状态 ----
     private int panelX;

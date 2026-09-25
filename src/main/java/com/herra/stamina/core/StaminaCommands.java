@@ -52,7 +52,7 @@ import java.util.Locale;
  * </pre>
  *
  * <p>config 子指令直接修改 SERVER 配置并保存到
- * {@code world/serverconfig/herra-stamina-server.toml}，重启后仍然生效。</p>
+ * {@code world/serverconfig/herra_stamina-server.toml}，重启后仍然生效。</p>
  */
 public final class StaminaCommands {
 

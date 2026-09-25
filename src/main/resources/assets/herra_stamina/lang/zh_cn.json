@@ -35,7 +35,7 @@
   "herra_stamina.screen.toggle.hide": "自动隐藏",
 
   "herra_stamina.command.menu.opening": "正在打开体力系统设置…（调整仅对你自己生效）",
-  "herra_stamina.command.help.header": "—— HERRA 体力指令 ——",
+  "herra_stamina.command.help.header": "—— 体力指令 ——",
   "herra_stamina.command.help.menu": "/sta —— 打开设置界面（位置/样式/提示音）",
   "herra_stamina.command.help.self": "/stamina —— 查看自己的体力值",
   "herra_stamina.command.help.admin": "/sta help —— 显示本帮助",

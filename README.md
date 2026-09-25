@@ -1,8 +1,8 @@
-# HERRA Stamina — 独立体力条模组
+# Stamina — 独立体力条模组
 
-HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/跳/游消耗、延迟恢复、
-透支惩罚、物品栏上方像素风 HUD），不含战局、播报、枪械等内容，与其他 HERRA
-模组零硬耦合（联动统一走 `com.herra.stamina.api`）。
+面向搜打撤玩法的独立小模组：只负责**体力系统本身**（跑/跳/游消耗、延迟恢复、
+透支惩罚、物品栏上方像素风 HUD），不含战局、播报、枪械等内容，与其他模组
+零硬耦合（联动统一走 `com.herra.stamina.api`）。
 
 | 项目 | 版本 |
 |---|---|
@@ -18,12 +18,12 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 ```bash
 # 需要 JDK 21（Gradle 会按需自动下载）
 ./gradlew build
-# 产物：build/libs/herra_stamina-1.0.2.jar
+# 产物：build/libs/herra_stamina-1.0.3.jar
 ```
 
 运行环境（服务器与客户端都需）：
 - NeoForge 21.1.216+
-- LDLib2（Modrinte/CurseForge 搜 "LDLib2"，1.21.1 版 ≥ 2.2.1；开发坐标见下）
+- LDLib2（Modrinth/CurseForge 搜 "LDLib2"，1.21.1 版 ≥ 2.2.1；开发坐标见下）
 
 开发环境调试：`./gradlew runClient` / `./gradlew runServer`
 
@@ -103,7 +103,7 @@ auto_hide / hide_delay_ticks / show_icon / show_body_status / show_status_text /
 
 输入 **`/sta`** 直接打开搜打撤风格战术设置面板（暗色军规 + 琥珀强调 +
 扫描线 + 角落括号，全代码绘制）。修改**即时生效**，关闭界面自动保存到
-本地 `config/herra-stamina-client.toml`，不影响其他玩家：
+本地 `config/herra_stamina-client.toml`，不影响其他玩家：
 
 - **位置调整**：拖拽小地图直接摆放体力条（含物品栏参考框、中心参考线、
   悬停十字线），或用 水平X / 高度Y / 缩放 滑条微调；一键「居中复位」
@@ -128,7 +128,7 @@ auto_hide / hide_delay_ticks / show_icon / show_body_status / show_status_text /
 
 **以下子命令均挂 /sta 且需要 OP（权限 2）—— 所有涉及数值修改的指令
 一律管理员权限**，改完立即生效并写入 TOML
-（`world/serverconfig/herra-stamina-server.toml`，重启不丢）：
+（`world/serverconfig/herra_stamina-server.toml`，重启不丢）：
 
 ```text
 /sta info <player>                     查看指定玩家体力
@@ -152,14 +152,14 @@ auto_hide / hide_delay_ticks / show_icon / show_body_status / show_status_text /
 
 示例：`/sta config sprint-drain 8`（疾跑变慢耗）、
 `/sta config walk-slowdown 0.15`（透支移速 x0.85）、
-`/sta modifier give Steve "herra_med:test" 60 0.5 30 5`
+`/sta modifier give Steve "med:test" 60 0.5 30 5`
 （60 秒：消耗减半、上限+30、恢复+5/s —— 不写代码就能验证药品接口）
 
 > 手改 TOML 同样支持：SERVER 配置文件被监听，存盘即热重载。
 
 ---
 
-## 6. HERRA 生态对接（其他模组如何联动）
+## 6. 生态对接（其他模组如何联动）
 
 本模组可被单独禁用；其他模组请**先判空再使用**，不要在 mods.toml 里硬依赖。
 
@@ -169,7 +169,7 @@ auto_hide / hide_delay_ticks / show_icon / show_body_status / show_status_text /
 repositories { maven { url = "https://maven.firstdark.dev/snapshots" } }
 dependencies {
     compileOnly "com.lowdragmc.ldlib2:ldlib2-neoforge-1.21.1:2.2.41:all"
-    compileOnly files("libs/herra_stamina-1.0.0.jar") // 或发布到 HERRA 内部 maven
+    compileOnly files("libs/herra_stamina-1.0.3.jar") // 或发布到内部 maven
 }
 ```
 
@@ -220,7 +220,7 @@ StaminaAPI.registerDrainModifier((player, action, cost) -> {
 import com.herra.stamina.api.StaminaModifier;
 
 // 能量饮料：90 秒内消耗减半、上限 +30、恢复提速 50%
-StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:energy_drink")
+StaminaAPI.applyModifier(player, StaminaModifier.builder("med:energy_drink")
         .maxStaminaBonus(30.0f)      // 上限加算（体力条变长）
         .drainMultiplier(0.5f)       // 疾跑/跳跃/游泳/自定义消耗全部减半
         .regenMultiplier(1.5f)       // 恢复提速
@@ -228,10 +228,10 @@ StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:energy_drink
         .build());
 
 // 药效被解药打断
-StaminaAPI.clearModifier(player, "herra_med:energy_drink");
+StaminaAPI.clearModifier(player, "med:energy_drink");
 
 // 重病 debuff：上限乘算 + 消耗加重 + 恢复变慢
-StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:fever")
+StaminaAPI.applyModifier(player, StaminaModifier.builder("med:fever")
         .maxStaminaMultiplier(0.7f)
         .drainMultiplier(1.4f)
         .regenMultiplier(0.6f)
@@ -360,6 +360,14 @@ src/main/java/com/herra/stamina/
   修改或到期时钳制当前体力并强制重同步（HUD 条长度即时变化）
 
 ## 11. 版本记录
+
+### v1.0.3
+- **品牌调整**：模组显示名去掉团队前缀（HERRA Stamina → Stamina），作者信息
+  同步更新；README 全面去品牌化（如「HERRA 生态对接」→「生态对接」，示例
+  修改器 id 改为中性命名）；代码标识（mod id `herra_stamina`、包名
+  `com.herra.stamina`）保持不变，存档 / 配置 / API 兼容性不受影响
+- 修正：文档中配置文件名笔误（`herra-stamina-*.toml` → `herra_stamina-*.toml`，
+  与 NeoForge 实际生成一致）；issue 跟踪链接指向本仓库
 
 ### v1.0.2
 - **HUD 默认位置上移**：offset_y 默认 72 → 84（避开自定义血条/护甲条，
