@@ -1,4 +1,21 @@
 {
   "herra_stamina.hud.winded": "呼吸急促",
-  "herra_stamina.hud.exhausted": "体力透支"
+  "herra_stamina.hud.exhausted": "体力透支",
+
+  "herra_stamina.command.info.line": "%s 的体力: %s / %s (%s%%)",
+  "herra_stamina.command.state.exhausted": "状态: 体力透支（恢复减速，禁止疾跑）",
+  "herra_stamina.command.state.winded": "状态: 呼吸急促（禁止疾跑）",
+  "herra_stamina.command.set.success": "已将 %s 的体力设置为 %s",
+  "herra_stamina.command.add.success": "%s 的体力 %s → %s（%s%s）",
+  "herra_stamina.command.exhaust.success": "已清空 %s 的体力并进入透支锁定",
+  "herra_stamina.command.reset.success": "已将 %s 的体力回满（%s）",
+  "herra_stamina.command.modifier.entry": "修改器: %s（剩余 %s）",
+  "herra_stamina.command.modifier.permanent": "永久",
+  "herra_stamina.command.modifier.none": "无生效中的修改器",
+  "herra_stamina.command.modifier.clear.success": "已清空 %s 的 %s 个体力修改器",
+  "herra_stamina.command.modifier.give.success": "已给 %s 挂载修改器 %s：消耗 x%s、上限 %s、恢复 %s，持续 %s 秒",
+  "herra_stamina.command.config.set": "已设置 %s = %s（已写入服务器配置，重启后仍生效）",
+  "herra_stamina.command.config.show.header": "—— 服务器体力数值（/stamina config <参数> <数值> 可修改）——",
+  "herra_stamina.command.config.show.entry": "%s: %s",
+  "herra_stamina.command.no_permission": "你没有权限查看其他玩家的体力"
 }

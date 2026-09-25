@@ -3,6 +3,7 @@ package com.herra.stamina;
 import com.herra.stamina.config.StaminaClientConfig;
 import com.herra.stamina.config.StaminaServerConfig;
 import com.herra.stamina.core.ModAttachments;
+import com.herra.stamina.core.StaminaCommands;
 import com.herra.stamina.core.StaminaGameEvents;
 import com.herra.stamina.network.ModNetworking;
 import net.minecraft.resources.ResourceLocation;
@@ -37,8 +38,9 @@ public class HerraStamina {
         container.registerConfig(ModConfig.Type.SERVER, StaminaServerConfig.SPEC);
         container.registerConfig(ModConfig.Type.CLIENT, StaminaClientConfig.SPEC);
 
-        // 服务端玩法逻辑（游戏总线）
+        // 服务端玩法逻辑 + 游戏内调节指令（游戏总线）
         NeoForge.EVENT_BUS.register(StaminaGameEvents.class);
+        NeoForge.EVENT_BUS.register(StaminaCommands.class);
 
         LOGGER.info("HERRA Stamina 已加载，体力系统就绪。");
     }

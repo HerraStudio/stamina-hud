@@ -4,6 +4,7 @@ import com.herra.stamina.config.StaminaServerConfig;
 import com.herra.stamina.core.ModAttachments;
 import com.herra.stamina.core.StaminaData;
 import com.herra.stamina.core.StaminaManager;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
@@ -23,6 +24,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <pre>{@code
  * StaminaAPI.registerDrainModifier((player, action, cost) ->
  *     action == StaminaAction.SPRINT && isWearingHeavyArmor(player) ? cost * 1.35F : cost);
+ * }</pre>
+ *
+ * <p>定时增益（医药模组等）请用 {@link StaminaModifier}：</p>
+ * <pre>{@code
+ * StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:stimulant")
+ *         .drainMultiplier(0.5F)      // 消耗减半（疾跑/跳跃/游泳全部生效）
+ *         .maxStaminaBonus(30.0F)     // 体力上限 +30（体力条变长）
+ *         .regenMultiplier(1.5F)      // 恢复提速 50%
+ *         .durationSeconds(90)        // 90 秒后自动失效
+ *         .build());
  * }</pre>
  */
 public final class StaminaAPI {
@@ -60,6 +71,61 @@ public final class StaminaAPI {
     /** 内部：客户端 HUD 安装显示桥。 */
     public static void installClientDisplay(ClientDisplayBridge bridge) {
         clientDisplay = bridge;
+    }
+
+    // ------------------------------------------------------------------ 定时修改器（医药/增益类模组）
+
+    /**
+     * 挂载/刷新一个定时修改器（同 id 覆盖：刷新剩余时间与数值）。
+     * 服务端调用；生效期间自动影响体力上限、全部消耗与恢复速度，
+     * 到期自动失效并重新同步 HUD，调用方无需自己计时。
+     */
+    public static void applyModifier(Player player, StaminaModifier modifier) {
+        requireServer(player, "applyModifier");
+        StaminaData.of(player).applyModifier(modifier);
+        if (player instanceof ServerPlayer serverPlayer) {
+            StaminaManager.syncNow(serverPlayer);
+        }
+    }
+
+    /** 移除指定 id 的修改器（如药效被解药打断）。 */
+    public static void clearModifier(Player player, String id) {
+        requireServer(player, "clearModifier");
+        StaminaData.of(player).clearModifier(id);
+        if (player instanceof ServerPlayer serverPlayer) {
+            StaminaManager.syncNow(serverPlayer);
+        }
+    }
+
+    /** 清空该玩家全部修改器（死亡/新战局/洗胃等场景）。 */
+    public static void clearModifiers(Player player) {
+        requireServer(player, "clearModifiers");
+        StaminaData.of(player).clearModifiers();
+        if (player instanceof ServerPlayer serverPlayer) {
+            StaminaManager.syncNow(serverPlayer);
+        }
+    }
+
+    /** 生效中修改器的只读快照（不包含剩余时间）。 */
+    public static List<StaminaModifier> getActiveModifiers(Player player) {
+        List<StaminaModifier> list = new java.util.ArrayList<>();
+        for (StaminaData.ActiveModifier active : StaminaData.of(player).getActiveModifiers()) {
+            list.add(active.modifier);
+        }
+        return list;
+    }
+
+    /** 生效中修改器 + 剩余 tick（-1 = 永久）。UI/指令展示用。 */
+    public static List<ModifierEntry> getActiveModifierEntries(Player player) {
+        List<ModifierEntry> list = new java.util.ArrayList<>();
+        for (StaminaData.ActiveModifier active : StaminaData.of(player).getActiveModifiers()) {
+            list.add(new ModifierEntry(active.modifier, active.remainingTicks));
+        }
+        return list;
+    }
+
+    /** 修改器条目（修改器 + 剩余 tick）。 */
+    public record ModifierEntry(StaminaModifier modifier, int remainingTicks) {
     }
 
     // ------------------------------------------------------------------ 读取

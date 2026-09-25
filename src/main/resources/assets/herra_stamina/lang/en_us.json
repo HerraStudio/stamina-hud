@@ -1,4 +1,21 @@
 {
   "herra_stamina.hud.winded": "WINDED",
-  "herra_stamina.hud.exhausted": "EXHAUSTED"
+  "herra_stamina.hud.exhausted": "EXHAUSTED",
+
+  "herra_stamina.command.info.line": "%s's stamina: %s / %s (%s%%)",
+  "herra_stamina.command.state.exhausted": "State: Exhausted (slow recovery, sprint disabled)",
+  "herra_stamina.command.state.winded": "State: Winded (sprint disabled)",
+  "herra_stamina.command.set.success": "Set %s's stamina to %s",
+  "herra_stamina.command.add.success": "%s's stamina %s -> %s (%s%s)",
+  "herra_stamina.command.exhaust.success": "Emptied %s's stamina and applied exhaustion lock",
+  "herra_stamina.command.reset.success": "Restored %s's stamina to full (%s)",
+  "herra_stamina.command.modifier.entry": "Modifier: %s (%s remaining)",
+  "herra_stamina.command.modifier.permanent": "permanent",
+  "herra_stamina.command.modifier.none": "No active modifiers",
+  "herra_stamina.command.modifier.clear.success": "Cleared %s stamina modifier(s) from %s",
+  "herra_stamina.command.modifier.give.success": "Applied modifier %s to %s: drain x%s, max %s, regen %s, for %s seconds",
+  "herra_stamina.command.config.set": "Set %s = %s (saved to server config, persists across restarts)",
+  "herra_stamina.command.config.show.header": "---- Server stamina values (change with /stamina config <key> <value>) ----",
+  "herra_stamina.command.config.show.entry": "%s: %s",
+  "herra_stamina.command.no_permission": "You don't have permission to view other players' stamina"
 }

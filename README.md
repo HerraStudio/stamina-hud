@@ -41,7 +41,8 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 
 ## 3. HUD（LDLib2 ModularHudLayer）
 
-- 位置：物品栏上方正中（默认距底 60px，在护甲条之上，不遮挡血/甲/氧/经验）
+- 位置：物品栏上方正中（默认距底 72px，避开自定义血条；在护甲条之上，
+  不遮挡血/甲/氧/经验；`hud.offset_y` 可调，改客户端 toml 即时生效）
 - 像素风贴图 + 分段刻痕 + 2px 高光端帽，与原版 GUI 质感统一
 - **动画**：数值平滑插值；大额扣减时格斗游戏式"幽灵拖尾"（被扣部分
   逐列 白→黄→红 渐变消失）+ 白闪 + 像素火花迸溅；低体力红色呼吸脉动；
@@ -78,14 +79,45 @@ show_icon / show_body_status / show_status_text / animation_speed`；
 配色四段渐变 `colors.full / mid / low / crit`（0xRRGGBB，默认 米白→金黄→橙→红）
 
 > 数值全部实时读取，无需重启；整合包可用 `defaultconfigs/` 统一发货。
+> 运行中改客户端 toml 即时生效（文件监听自动重载）。
 
 ---
 
-## 5. HERRA 生态对接（其他模组如何联动）
+## 5. 游戏内调节指令 `/stamina`
+
+服务端 OP（权限 2）可直接在游戏里调数值，改完立即生效**并写入 TOML**
+（`world/serverconfig/herra-stamina-server.toml`，重启不丢）：
+
+```text
+/stamina                                查看自己的体力
+/stamina info [player]                 查看体力（看别人需 OP）
+/stamina set <player> <value>          设置体力
+/stamina add <player> <value>          增减体力（可为负）
+/stamina exhaust <player>              清空 + 透支锁（测试低体力惩罚）
+/stamina reset <player>                回满
+/stamina modifier list [player]        生效中的修改器
+/stamina modifier clear <player>       清空修改器
+/stamina modifier give <player> <id> <seconds> [drain×] [maxBonus] [regen/s]
+                                        挂测试增益（与医药模组同路径，id 含冒号要加引号）
+/stamina config show                   列出全部服务器数值
+/stamina config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
+                 regen|regen-exhausted|delay|delay-exhausted|
+                 sprint-stop|release <value>   改数值并落盘
+```
+
+示例：`/stamina config sprint-drain 8`（疾跑变慢耗）、
+`/stamina modifier give Steve "herra_med:test" 60 0.5 30 5`
+（60 秒：消耗减半、上限+30、恢复+5/s —— 不写代码就能验证药品接口）
+
+> 手改 TOML 同样支持：SERVER 配置文件被监听，存盘即热重载。
+
+---
+
+## 6. HERRA 生态对接（其他模组如何联动）
 
 本模组可被单独禁用；其他模组请**先判空再使用**，不要在 mods.toml 里硬依赖。
 
-### 5.1 编译依赖
+### 6.1 编译依赖
 
 ```groovy
 repositories { maven { url = "https://maven.firstdark.dev/snapshots" } }
@@ -95,7 +127,7 @@ dependencies {
 }
 ```
 
-### 5.2 读取 / 操作体力（服务端权威，静态门面 `StaminaAPI`）
+### 6.2 读取 / 操作体力（服务端权威，静态门面 `StaminaAPI`）
 
 ```java
 // 无需 Holder 判空 —— 类始终存在；模组被禁用时方法自然无人调用
@@ -119,7 +151,7 @@ boolean burnt  = StaminaAPI.isExhausted(player);    // 透支锁中
 - 直接取：`com.herra.stamina.client.ClientStaminaData`（静态：getRatio /
   isExhausted / isWinded / getGhostRatio 等，均为同步后的插值状态）
 
-### 5.3 消耗规则修改器（持续消耗：疾跑/游泳）
+### 6.3 消耗规则修改器（持续消耗：疾跑/游泳）
 
 持续消耗每 tick 结算、不走事件 —— 用 `StaminaDrainModifier` 改写规则：
 
@@ -133,7 +165,42 @@ StaminaAPI.registerDrainModifier((player, action, cost) -> {
 // 卸载时：StaminaAPI.unregisterDrainModifier(...)
 ```
 
-### 5.4 事件（NeoForge 游戏总线，服务端）
+### 6.4 定时修改器 `StaminaModifier`（医药/增益类模组推荐入口）
+
+一次调用同时影响 **体力上限、全部消耗、恢复速度**，服务端自动倒计时、
+到期自动失效并同步 HUD，无需自己计时。同 id 重复 apply = 刷新：
+
+```java
+import com.herra.stamina.api.StaminaModifier;
+
+// 能量饮料：90 秒内消耗减半、上限 +30、恢复提速 50%
+StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:energy_drink")
+        .maxStaminaBonus(30.0f)      // 上限加算（体力条变长）
+        .drainMultiplier(0.5f)       // 疾跑/跳跃/游泳/自定义消耗全部减半
+        .regenMultiplier(1.5f)       // 恢复提速
+        .durationSeconds(90)
+        .build());
+
+// 药效被解药打断
+StaminaAPI.clearModifier(player, "herra_med:energy_drink");
+
+// 重病 debuff：上限乘算 + 消耗加重 + 恢复变慢
+StaminaAPI.applyModifier(player, StaminaModifier.builder("herra_med:fever")
+        .maxStaminaMultiplier(0.7f)
+        .drainMultiplier(1.4f)
+        .regenMultiplier(0.6f)
+        .durationMinutes(10)
+        .build());
+
+// 查询 / 清空
+StaminaAPI.getActiveModifiers(player);
+StaminaAPI.clearModifiers(player);   // 洗胃、死亡、新战局
+```
+
+聚合规则：`最终上限 = (基础 + Σ加算) × Π乘算`（最低 1）；消耗与恢复同理乘算叠加。
+修改器为运行时数据（不落盘，退出即清），药品自身管理药效周期即可。
+
+### 6.5 事件（NeoForge 游戏总线，服务端）
 
 | 事件 | 时机 | 用途 |
 |---|---|---|
@@ -155,37 +222,42 @@ static void onConsume(StaminaEvent.Consume e) {
 
 ---
 
-## 6. 测试清单
+## 7. 测试清单
 
 1. `./gradlew runClient` → 生存模式（创造不消耗）
-2. 疾跑：条淡入，白色平滑下降；到 0 → 变红 + 「体力透支」+ 禁跑
+2. **疾跑消耗**（v1.0.0 已修复：服务端移动检测改用位置差）：疾跑时条应平滑下降；
+   疾跑 + 跳跃 = 持续消耗 + 一次性 10
 3. 停下 1.2 秒：平滑回升；跳一下（消耗 10）→ 白闪 + 火花 + 幽灵拖尾渐变
 4. 透支后恢复到 30 → 恢复疾跑能力（`StaminaEvent.Recovered` 触发）
 5. 回满 → 扫光 → 2 秒后自动隐藏；再跑立刻淡入
-6. 穿钻石甲站定：确认不遮挡护甲行（遮挡则调 `hud.offset_y`）
+6. 确认 HUD 不遮挡自定义血条（遮挡则调 `hud.offset_y`，默认已上移到 72）
 7. 游泳/疾速游泳按低速率消耗；水下跳跃不触发跳跃消耗
-8. 修改 serverconfig 数值重进世界 → 立即生效
-9. 服务端：`./gradlew runServer` 冒烟（已在开发环境验证：Done in 20s，无报错）
+8. `/stamina` 指令：`config show` / `config sprint-drain 8` 看条下降变慢并检查 TOML 已写入；
+   `set/add/exhaust/reset` 直接操纵体力；
+   `modifier give 自己 "test:buff" 60 0.5 30 5` 验证药品接口（消耗减半+条变长）
+9. 服务端：`./gradlew runServer` 冒烟（已在开发环境 RCON 端到端验证：19/19 通过）
 
-## 7. 源码结构
+## 8. 源码结构
 
 ```
 src/main/java/com/herra/stamina/
-├── HerraStamina.java              主类（注册 Attachment/网络/配置/事件）
-├── core/                          核心：StaminaData（Attachment 数据 + 透支锁 + 同步节流）、
+├── HerraStamina.java              主类（注册 Attachment/网络/配置/事件/指令）
+├── core/                          核心：StaminaData（Attachment 数据 + 透支锁 + 修改器 + 同步节流）、
 │                                    StaminaManager（消耗/恢复/跳跃/同步规则）、
-│                                    StaminaGameEvents（事件接线）、ModAttachments
+│                                    StaminaGameEvents（事件接线）、
+│                                    StaminaCommands（/stamina 指令）、ModAttachments
 ├── config/                        Server/Client 双配置（中文注释）
 ├── network/                       StaminaSyncPayload（4 字段同步包）+ ModNetworking
 ├── api/                           生态 API：StaminaAPI（静态门面）、StaminaAction、
-│     (+ api/event/)                StaminaDrainModifier、ClientDisplayBridge、
+│     (+ api/event/)                StaminaModifier（定时修改器）、StaminaDrainModifier、
+│                                    ClientDisplayBridge、
 │                                    StaminaEvent.Consume/Changed/Exhausted/Recovered
 └── client/ (+ client/hud/)        ClientStaminaData（动画状态机+显示桥）、
                                      StaminaHudElement（像素绘制 HUD）、
                                      HerraStaminaClient/ClientEvents/ClientPacketHandlers
 ```
 
-## 8. 后续扩展方向（已预留接口）
+## 9. 后续扩展方向（已预留接口）
 
 - **身体部位系统**：HUD 下方 4 个占位图标即挂点；新增身体状态同步包 + 图标染色
 - **GWO 负重/枪械联动**：`StaminaDrainModifier` 改写规则；开镜/据枪消耗用 `tryConsume`
@@ -194,7 +266,7 @@ src/main/java/com/herra/stamina/
 - **表现层**：呼吸音效、LDLib2 StyleAnimation 主题化、数值显示、`ANIMATION_SPEED`
 - **配置界面**：LDLib2 Configurable 注解体系可自动生成配置 UI
 
-## 9. 技术要点备忘
+## 10. 技术要点备忘
 
 - 跳跃消耗用 `LivingEvent.LivingJumpEvent`（在 `jumpFromGround()` 内触发，
   含跳跃药水/马匹等变体，精确无误判）。**注意**：NeoForge 21.1 中该事件
@@ -209,3 +281,24 @@ src/main/java/com/herra/stamina/
 - 客户端镜像禁跑：`sprintBlocked` 随包同步，客户端 `ClientTickEvent` 里
   主动 `setSprinting(false)`，与原版饥饿禁跑同思路，避免疾跑 FOV 抖动
 
+
+- **服务端移动检测必须用位置差，不能用 `getDeltaMovement()`**：
+  服务端玩家移动走 `handleMovePlayer -> Entity.move(PLAYER, ...)`，
+  只写坐标不写 deltaMovement（仅撞墙/击退等才写），输入移动时它恒为 0 ——
+  v1.0.0 曾因此出现"疾跑不消耗、只有跳跃消耗"的 bug，已改为
+  `StaminaData.updateMovement()` 记录每 tick 位置差（可靠）
+- 修改器（`StaminaModifier`）为运行时聚合：上限/消耗/恢复每次实时聚合，
+  修改或到期时钳制当前体力并强制重同步（HUD 条长度即时变化）
+
+## 11. 版本记录
+
+### v1.0.0（首发版）
+
+- 核心：疾跑/跳跃/游泳/疾速游泳消耗、延迟恢复、透支锁定、低体力禁跑
+- HUD：LDLib2 像素风体力条（白→黄→红渐变、幽灵拖尾、火花、扫光、自动隐藏）
+- 配置：SERVER 玩法数值 + CLIENT HUD 表现，全中文注释，热重载
+- **修复**：疾跑不消耗（服务端 `deltaMovement` 恒 0 问题，改位置差检测）
+- 指令：`/stamina` 全套游戏内调节（数值改完即写盘）
+- 生态 API：`StaminaAPI` 门面、`StaminaModifier` 定时修改器（医药模组入口）、
+  `StaminaDrainModifier` 消耗规则、4 个事件、`ClientDisplayBridge` 客户端桥
+- CI/CD：GitHub Actions（push 构建、打 tag 自动发 Release 附带 jar）

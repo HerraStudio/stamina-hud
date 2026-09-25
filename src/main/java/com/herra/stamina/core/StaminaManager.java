@@ -25,7 +25,14 @@ public final class StaminaManager {
 
         StaminaData st = StaminaData.of(player);
 
+        // ---- 修改器倒计时（到期自动失效，上限可能变化） ----
+        st.tickModifiers();
+
         // ---- 消耗来源判定 ----
+        // 注意：移动检测必须用位置差（StaminaData.updateMovement）。
+        // 服务端玩家的 deltaMovement 不随输入更新（Entity.move 只写坐标），
+        // 用它判断“是否在移动”会恒为 false —— 这是 v1.0.0 疾跑不消耗的原因。
+        boolean moving = st.updateMovement(player);
         float drain = 0.0F;
         StaminaAction action = StaminaAction.SPRINT;
         if (player.isInWater() && player.isSwimming()) {
@@ -36,15 +43,15 @@ public final class StaminaManager {
                     : StaminaServerConfig.f(StaminaServerConfig.SWIM_DRAIN_PER_SECOND);
         } else if (player.isSprinting()
                 && !player.getAbilities().flying
-                && player.getDeltaMovement().horizontalDistanceSqr() > 1.0e-4) {
+                && moving) {
             action = StaminaAction.SPRINT;
             drain = StaminaServerConfig.f(StaminaServerConfig.SPRINT_DRAIN_PER_SECOND);
         }
 
         if (drain > 0.0F) {
-            // 持续消耗走 drain modifier（不逐 tick 触发 Consume 事件，避免事件风暴）
-            drain = StaminaAPI.applyDrainModifiers(player, action, drain) / 20.0F;
-            drain(player, drain, action, true);
+            // 持续消耗：全局消耗修改器与修改器倍率统一在 drain() 内应用
+            // （不逐 tick 触发 Consume 事件，避免事件风暴）
+            drain(player, drain / 20.0F, action, true);
             st.setTicksSinceConsumption(0);
         } else {
             recover(player, st);
@@ -70,10 +77,15 @@ public final class StaminaManager {
         boolean lock = st.isExhaustedLock();
         int delay = StaminaServerConfig.RECOVERY_DELAY_TICKS.get()
                 + (lock ? StaminaServerConfig.EXHAUSTED_RECOVERY_DELAY_TICKS.get() : 0);
+        if (st.getTicksSinceConsumption() < delay) {
+            return;
+        }
         float rate = lock
                 ? StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_RECOVERY_PER_SECOND)
                 : StaminaServerConfig.f(StaminaServerConfig.RECOVERY_PER_SECOND);
-        if (rate <= 0.0F || st.getTicksSinceConsumption() < delay) {
+        // 修改器：乘算 × 加算（正常与透支恢复都生效）
+        rate = rate * st.getRegenMultiplier() + st.getRegenBonus();
+        if (rate <= 0.0F) {
             return;
         }
         float now = Math.min(max, current + rate / 20.0F);
@@ -90,7 +102,7 @@ public final class StaminaManager {
     /**
      * 部分扣除：有多少扣多少，返回实际扣除量。
      *
-     * @param continuous true = 疾跑/游泳等持续消耗（跳过 Consume 事件）
+     * @param continuous true = 疾跑/游泳等持续消耗（跳过 Consume 事件，应用消耗修改器）
      */
     public static float drain(Player player, float amount, StaminaAction action, boolean continuous) {
         StaminaData st = StaminaData.of(player);
@@ -100,7 +112,8 @@ public final class StaminaManager {
         }
 
         if (continuous) {
-            amount = StaminaAPI.applyDrainModifiers(player, action, amount);
+            // 全局消耗规则修改器（StaminaDrainModifier）× 修改器倍率（医药 buff 等）
+            amount = StaminaAPI.applyDrainModifiers(player, action, amount) * st.getDrainMultiplier();
             if (amount <= 0.0F) {
                 return 0.0F;
             }
@@ -110,7 +123,11 @@ public final class StaminaManager {
             if (event.isCanceled() || event.getAmount() <= 0.0F) {
                 return 0.0F;
             }
-            amount = event.getAmount();
+            // 一次性消耗同样吃修改器倍率（药品“消耗减半”应覆盖跳跃等全部动作）
+            amount = event.getAmount() * st.getDrainMultiplier();
+            if (amount <= 0.0F) {
+                return 0.0F;
+            }
         }
 
         float cost = Math.min(amount, current);
@@ -134,6 +151,7 @@ public final class StaminaManager {
             return;
         }
         float base = StaminaServerConfig.f(StaminaServerConfig.JUMP_COST);
+        // 全局消耗规则修改器（重甲加重等）；修改器倍率与 Consume 事件在 drain() 内处理
         float cost = StaminaAPI.applyDrainModifiers(player, StaminaAction.JUMP, base);
         if (cost <= 0.0F) {
             return;
@@ -141,7 +159,7 @@ public final class StaminaManager {
         drain(player, cost, StaminaAction.JUMP, false);
     }
 
-    // ------------------------------------------------------------------ 直接设置（API 用）
+    // ------------------------------------------------------------------ 直接设置（API / 指令用）
 
     public static void setStamina(Player player, float value) {
         StaminaData st = StaminaData.of(player);

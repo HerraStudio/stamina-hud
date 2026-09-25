@@ -34,8 +34,9 @@ public final class StaminaClientConfig {
                 .define("enabled", true);
         HUD_OFFSET_X = b.comment("水平偏移（0 = 屏幕正中，对齐物品栏中心）")
                 .defineInRange("offset_x", 0, -1_000, 1_000);
-        HUD_OFFSET_Y = b.comment("体力条底边距屏幕底部的像素数（默认 60：位于护甲条上方，不遮挡血条/护甲/氧气）")
-                .defineInRange("offset_y", 60, 0, 1_000);
+        HUD_OFFSET_Y = b.comment("体力条底边距屏幕底部的像素数（默认 72：避开自定义血条，位于护甲条上方；"
+                        + "数值越大越靠上。如仍遮挡 HUD 可继续调大，游戏运行中修改本文件即时生效）")
+                .defineInRange("offset_y", 72, 0, 1_000);
         AUTO_HIDE = b.comment("体力回满后自动隐藏（再次消耗时淡入）")
                 .define("auto_hide", true);
         HIDE_DELAY_TICKS = b.comment("回满后延迟多少 tick 再隐藏（20 tick = 1 秒）")
