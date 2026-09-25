@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# Minecraft dev run dirs
+run/
+run-server/
+runs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+repo/

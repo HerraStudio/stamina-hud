@@ -1,0 +1,54 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.147'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    // LDLib2
+    maven {
+        name = 'FirstDarkDev'
+        url = 'https://maven.firstdark.dev/snapshots'
+    }
+}
+
+neoForge {
+    version = neo_version
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        herra_stamina {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // LDLib2: UI front-library (HUD host). Uses the official 'all' classifier per docs.
+    api("com.lowdragmc.ldlib2:ldlib2-neoforge-${minecraft_version}:${ldlib2_version}:all")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
