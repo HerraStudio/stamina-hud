@@ -105,7 +105,9 @@ public final class ClientStaminaData {
         }
     }
 
-    /** 客户端 tick：玩家不在时重置；镜像低体力禁跑（防止疾跑 FOV 抖动） */
+    /** 客户端 tick：玩家不在时重置；镜像低体力禁跑。
+     * 主压制在 LocalPlayerMixin（原版饥饿禁跑判定点，双端一致）；
+     * 这里的镜像仅作 desync 兜底 —— 若同步包迟到导致短暂疾跑，主动关掉。 */
     public static void clientTick(Minecraft mc) {
         LocalPlayer player = mc.player;
         if (player == null) {
@@ -113,7 +115,6 @@ public final class ClientStaminaData {
             return;
         }
         if (sprintBlocked && player.isSprinting()) {
-            // 与原版饥饿禁跑同思路：客户端主动关闭疾跑状态
             player.setSprinting(false);
         }
     }

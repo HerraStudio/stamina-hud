@@ -3,7 +3,7 @@
   "herra_stamina.hud.exhausted": "EXHAUSTED",
 
   "herra_stamina.command.info.line": "%s's stamina: %s / %s (%s%%)",
-  "herra_stamina.command.state.exhausted": "State: Exhausted (slow recovery, sprint disabled)",
+  "herra_stamina.command.state.exhausted": "State: Exhausted (slow recovery, sprint and jump disabled)",
   "herra_stamina.command.state.winded": "State: Winded (sprint disabled)",
   "herra_stamina.command.set.success": "Set %s's stamina to %s",
   "herra_stamina.command.add.success": "%s's stamina %s -> %s (%s%s)",

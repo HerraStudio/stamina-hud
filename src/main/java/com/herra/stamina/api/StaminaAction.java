@@ -18,6 +18,12 @@ public enum StaminaAction {
     /** 疾速游泳（持续消耗）。 */
     SWIM_SPRINT,
 
+    /** 近战攻击命中实体（一次性消耗）。 */
+    ATTACK,
+
+    /** 破坏方块（一次性消耗）。 */
+    BREAK_BLOCK,
+
     /** 第三方模组通过 StaminaAPI 发起的一次性消耗。 */
     CUSTOM
 }

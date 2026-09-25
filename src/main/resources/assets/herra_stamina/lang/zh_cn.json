@@ -3,7 +3,7 @@
   "herra_stamina.hud.exhausted": "体力透支",
 
   "herra_stamina.command.info.line": "%s 的体力: %s / %s (%s%%)",
-  "herra_stamina.command.state.exhausted": "状态: 体力透支（恢复减速，禁止疾跑）",
+  "herra_stamina.command.state.exhausted": "状态: 体力透支（恢复减速，禁止疾跑与跳跃）",
   "herra_stamina.command.state.winded": "状态: 呼吸急促（禁止疾跑）",
   "herra_stamina.command.set.success": "已将 %s 的体力设置为 %s",
   "herra_stamina.command.add.success": "%s 的体力 %s → %s（%s%s）",

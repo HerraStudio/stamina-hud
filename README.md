@@ -32,11 +32,14 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 ## 2. 玩法设计（默认值）
 
 - **满体力 100**，疾跑 12/秒（约 8.3 秒跑空），跳跃一次性 10，
-  游泳 5/秒、疾速游泳 9/秒（疾跑中跳跃 = 疾跑速率 + 跳跃值）
+  游泳 5/秒、疾速游泳 9/秒（疾跑中跳跃 = 疾跑速率 + 跳跃值）；
+  近战攻击 2/次、破坏方块 1/块（均可配置，0 = 关闭）
 - **恢复**：停止消耗 1.2 秒后开始，25/秒回满（约 4 秒）
-- **透支**：体力归零进入透支锁——禁跑、恢复延迟变 3 秒、恢复速度降为 15/秒，
-  恢复到 30 才解除禁跑（三角洲式"必须缓过来才能再跑"）
-- **低体力**（<15）：立即禁止疾跑，服务端压制 + 客户端镜像（无 FOV 抖动）
+- **透支**：体力归零进入透支锁——**禁止疾跑与跳跃**（只能正常行走）、
+  恢复延迟变 3 秒、恢复速度降为 15/秒，
+  恢复到 30 才解除（三角洲式"必须缓过来才能再跑"）
+- **低体力**（<15）：立即禁止疾跑，客户端 mixin 在原版饥饿禁跑的同一判定点
+  压制（按住疾跑键 / 切换式疾跑 / 双击 W 全覆盖，无 FOV 抖动）+ 服务端兜底
 - 创造/旁观模式不消耗；死亡重生满体力复活
 
 ## 3. HUD（LDLib2 ModularHudLayer）
@@ -65,12 +68,15 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 | drain.jump_cost | 10 | 跳跃一次性消耗 |
 | drain.swim_per_second | 5 | 游泳每秒消耗 |
 | drain.swim_sprint_per_second | 9 | 疾速游泳每秒消耗 |
+| drain.attack_cost | 2 | 近战攻击一次性消耗（0 = 关） |
+| drain.break_block_cost | 1 | 破坏方块一次性消耗（0 = 关） |
 | recovery.delay_ticks | 24 | 恢复延迟（tick） |
 | recovery.per_second | 25 | 恢复速度/秒 |
 | recovery.exhausted_delay_ticks | 60 | 透支后额外延迟 |
 | recovery.exhausted_per_second | 15 | 透支恢复速度/秒 |
 | penalty.sprint_stop_threshold | 15 | 低于禁跑 |
 | penalty.exhausted_release_threshold | 30 | 透支解除阈值 |
+| penalty.exhausted_block_jump | true | 透支期间禁止跳跃 |
 | network.sync_interval_ticks / sync_delta | 2 / 2.0 | 同步节流 |
 
 **客户端 HUD 表现** `herra_stamina-client.toml`（`config/` 目录）：
@@ -101,8 +107,9 @@ show_icon / show_body_status / show_status_text / animation_speed`；
                                         挂测试增益（与医药模组同路径，id 含冒号要加引号）
 /stamina config show                   列出全部服务器数值
 /stamina config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
-                 regen|regen-exhausted|delay|delay-exhausted|
-                 sprint-stop|release <value>   改数值并落盘
+                 attack-cost|break-cost|regen|regen-exhausted|delay|
+                 delay-exhausted|sprint-stop|release <value>   改数值并落盘
+/stamina config block-jump <true|false>  透支是否禁跳
 ```
 
 示例：`/stamina config sprint-drain 8`（疾跑变慢耗）、
@@ -287,10 +294,38 @@ src/main/java/com/herra/stamina/
   只写坐标不写 deltaMovement（仅撞墙/击退等才写），输入移动时它恒为 0 ——
   v1.0.0 曾因此出现"疾跑不消耗、只有跳跃消耗"的 bug，已改为
   `StaminaData.updateMovement()` 记录每 tick 位置差（可靠）
+- **透支禁跑必须在客户端原版判定点压制，不能事后 setSprinting(false)**：
+  客户端 `LocalPlayer.aiStep` 每 tick 会重启疾跑（按住疾跑键 / 切换式疾跑），
+  tick 末尾杀疾跑等于没杀（该 tick 的速度加成已生效）；mixin 进
+  `hasEnoughFoodToStartSprinting()`（原版饥饿禁跑判定点，同时门控
+  启动与维持）才能全覆盖且无 FOV 抖动
+- **透支禁跳用 JUMP_STRENGTH 属性而非取消事件**：LivingJumpEvent 在
+  1.21.1 不可取消；JUMP_STRENGTH 是同步属性（范围 0~32），挂
+  `ADD_VALUE -1024` 钳到 0 → 两端 `jumpFromGround()` 的
+  `f <= 1.0E-5` 守卫直接跳过，无橡皮筋、无客户端预测回弹
+- **游泳垂直位移消耗**：上浮/下潜时水平位移几乎为 0，垂直分量单独
+  记录（阈值 0.05 格/tick，排除水中被动下沉约 0.02~0.03 格/tick）
 - 修改器（`StaminaModifier`）为运行时聚合：上限/消耗/恢复每次实时聚合，
   修改或到期时钳制当前体力并强制重同步（HUD 条长度即时变化）
 
 ## 11. 版本记录
+
+### v1.0.1
+
+- **修复透支后仍可疾跑**：新增客户端 mixin（`LocalPlayerMixin`）注入原版
+  饥饿禁跑判定点 `hasEnoughFoodToStartSprinting()`，服务端 `sprintBlocked`
+  标志同步后在该点压制 —— 按住疾跑键 / 切换式疾跑（toggle sprint）/
+  双击 W 全部生效，FOV 平滑回落；服务端 `setSprinting(false)` 保留为兜底
+- **新增透支禁跳**：体力归零期间禁止跳跃（JUMP_STRENGTH 同步属性修饰符，
+  双端一致无橡皮筋；`penalty.exhausted_block_jump` 可关）；
+  透支前最后一跳仍允许（赌命跳，直接扣空进透支）
+- **新增消耗动作**：近战攻击 2/次（`attack_cost`）、破坏方块 1/块
+  （`break_block_cost`），吃全部生态修改器（药品减半同样生效）；
+  `StaminaAction` 新增 `ATTACK` / `BREAK_BLOCK`
+- **修复游泳消耗判定**：原地踩水不扣；上浮/下潜（垂直位移）正确计入
+  游泳消耗；滑翔（鞘翅）与骑乘不再误判为疾跑消耗
+- 指令新增：`/stamina config attack-cost | break-cost | block-jump`
+- 冒烟测试 26/26 通过（含新配置项落盘验证）
 
 ### v1.0.0（首发版）
 

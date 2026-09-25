@@ -21,6 +21,8 @@ public final class StaminaServerConfig {
     public static final ModConfigSpec.DoubleValue JUMP_COST;
     public static final ModConfigSpec.DoubleValue SWIM_DRAIN_PER_SECOND;
     public static final ModConfigSpec.DoubleValue SWIM_SPRINT_DRAIN_PER_SECOND;
+    public static final ModConfigSpec.DoubleValue ATTACK_COST;
+    public static final ModConfigSpec.DoubleValue BREAK_BLOCK_COST;
 
     public static final ModConfigSpec.IntValue RECOVERY_DELAY_TICKS;
     public static final ModConfigSpec.DoubleValue RECOVERY_PER_SECOND;
@@ -29,6 +31,7 @@ public final class StaminaServerConfig {
 
     public static final ModConfigSpec.DoubleValue SPRINT_STOP_THRESHOLD;
     public static final ModConfigSpec.DoubleValue EXHAUSTED_RELEASE_THRESHOLD;
+    public static final ModConfigSpec.BooleanValue EXHAUSTED_BLOCK_JUMP;
 
     public static final ModConfigSpec.IntValue SYNC_INTERVAL_TICKS;
     public static final ModConfigSpec.DoubleValue SYNC_DELTA;
@@ -49,6 +52,10 @@ public final class StaminaServerConfig {
                 .defineInRange("swim_per_second", 5.0, 0.0, 100_000.0);
         SWIM_SPRINT_DRAIN_PER_SECOND = b.comment("疾速游泳每秒消耗")
                 .defineInRange("swim_sprint_per_second", 9.0, 0.0, 100_000.0);
+        ATTACK_COST = b.comment("每次近战攻击命中实体的一次性消耗（0 = 关闭）")
+                .defineInRange("attack_cost", 2.0, 0.0, 100_000.0);
+        BREAK_BLOCK_COST = b.comment("每破坏一个方块的一次性消耗（0 = 关闭）")
+                .defineInRange("break_block_cost", 1.0, 0.0, 100_000.0);
         b.pop();
         b.push("recovery").comment("恢复参数");
         RECOVERY_DELAY_TICKS = b.comment("停止消耗后多少 tick 才开始恢复（20 tick = 1 秒）")
@@ -65,6 +72,8 @@ public final class StaminaServerConfig {
                 .defineInRange("sprint_stop_threshold", 15.0, 0.0, 1_000_000.0);
         EXHAUSTED_RELEASE_THRESHOLD = b.comment("透支后需恢复到该值才解除禁跑")
                 .defineInRange("exhausted_release_threshold", 30.0, 0.0, 1_000_000.0);
+        EXHAUSTED_BLOCK_JUMP = b.comment("体力透支（归零）期间是否禁止跳跃", "通过 JUMP_STRENGTH 属性修饰符实现（同步到客户端，无橡皮筋）；", "透支期跳跃药水仍有 0.1/级 的微弱弹跳（原版公式加算，可忽略）")
+                .define("exhausted_block_jump", true);
         b.pop();
         b.push("network").comment("同步节流（一般无需修改）");
         SYNC_INTERVAL_TICKS = b.comment("数值变化时的最小同步间隔（tick）")

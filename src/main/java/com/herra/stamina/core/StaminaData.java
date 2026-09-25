@@ -38,7 +38,10 @@ public class StaminaData {
 
     // ---- 移动检测（服务端玩家的 deltaMovement 不随输入更新，必须用位置差） ----
     private double lastX = Double.NaN;
+    private double lastY = Double.NaN;
     private double lastZ = Double.NaN;
+    private boolean movedHorizontally;
+    private boolean movedVertically;
 
     // ---- 生效中的修改器（运行时，id -> 实例） ----
     private final Map<String, ActiveModifier> modifiers = new LinkedHashMap<>();
@@ -196,18 +199,33 @@ public class StaminaData {
      * <p>不能用 {@code player.getDeltaMovement()}：服务端的移动由
      * {@code handleMovePlayer -> Entity.move} 应用，只改坐标不写
      * deltaMovement（只有撞墙/击退等才写），因此输入移动时它恒为 0。</p>
+     *
+     * <p>垂直位移单独记录（{@link #movedVertically()}），供游泳消耗判定
+     * 使用（下潜/上浮时水平位移几乎为 0）。阈值取 0.05 格/tick，
+     * 排除水中被动下沉（约 0.02~0.03 格/tick）与地面抖动。</p>
      */
     public boolean updateMovement(Player player) {
         double dx = player.getX() - lastX;
+        double dy = player.getY() - lastY;
         double dz = player.getZ() - lastZ;
         lastX = player.getX();
+        lastY = player.getY();
         lastZ = player.getZ();
-        if (Double.isNaN(dx) || Double.isNaN(dz)) {
-            return true; // 首次记录无法比较，按“在移动”处理（下 tick 起有真实差值）
+        if (Double.isNaN(dx) || Double.isNaN(dy) || Double.isNaN(dz)) {
+            movedHorizontally = movedVertically = true; // 首次记录无法比较，按“在移动”处理
+            return true;
         }
-        // 位置瞬移（传送/重生）不算正常移动，但也不至于误判为静止
-        double distSqr = dx * dx + dz * dz;
-        return distSqr <= 64.0 && distSqr > 1.0e-4; // 8 格内的小位移才算走/跑
+        double hSqr = dx * dx + dz * dz;
+        // 位置瞬移（传送/重生，>8 格）不算正常移动，但也不至于误判为静止
+        movedHorizontally = hSqr <= 64.0 && hSqr > 1.0e-4;
+        double vSqr = dy * dy;
+        movedVertically = vSqr <= 64.0 && vSqr > 0.0025; // |dy| > 0.05 格
+        return movedHorizontally;
+    }
+
+    /** 本 tick 是否有垂直主动位移（游泳上浮/下潜判定用）。 */
+    public boolean movedVertically() {
+        return movedVertically;
     }
 
     // ------------------------------------------------------------------ 写入（仅 StaminaManager / StaminaAPI 走这里，保证事件与同步一致）

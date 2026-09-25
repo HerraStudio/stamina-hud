@@ -1,6 +1,7 @@
 package com.herra.stamina.core;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -38,8 +39,9 @@ import java.util.Locale;
  *                                      测试生态接口（与医药模组同路径，OP 2）
  * /stamina config show                  查看服务器数值（OP 2）
  * /stamina config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
- *                    regen|regen-exhausted|delay|delay-exhausted|
- *                    sprint-stop|release &lt;value&gt;   调节并写入配置（OP 2）
+ *                    attack-cost|break-cost|regen|regen-exhausted|delay|
+ *                    delay-exhausted|sprint-stop|release|block-jump &lt;value&gt;
+ *                                      调节并写入配置（OP 2）
  * </pre>
  *
  * <p>config 子指令直接修改 SERVER 配置并保存到
@@ -186,10 +188,13 @@ public final class StaminaCommands {
                 .then(cfgFloat("jump-cost", "jump_cost", StaminaServerConfig.JUMP_COST, 0.0F, 100_000.0F))
                 .then(cfgFloat("swim-drain", "swim_per_second", StaminaServerConfig.SWIM_DRAIN_PER_SECOND, 0.0F, 100_000.0F))
                 .then(cfgFloat("swim-sprint-drain", "swim_sprint_per_second", StaminaServerConfig.SWIM_SPRINT_DRAIN_PER_SECOND, 0.0F, 100_000.0F))
+                .then(cfgFloat("attack-cost", "attack_cost", StaminaServerConfig.ATTACK_COST, 0.0F, 100_000.0F))
+                .then(cfgFloat("break-cost", "break_block_cost", StaminaServerConfig.BREAK_BLOCK_COST, 0.0F, 100_000.0F))
                 .then(cfgFloat("regen", "per_second", StaminaServerConfig.RECOVERY_PER_SECOND, 0.0F, 100_000.0F))
                 .then(cfgFloat("regen-exhausted", "exhausted_per_second", StaminaServerConfig.EXHAUSTED_RECOVERY_PER_SECOND, 0.0F, 100_000.0F))
                 .then(cfgFloat("sprint-stop", "sprint_stop_threshold", StaminaServerConfig.SPRINT_STOP_THRESHOLD, 0.0F, 1_000_000.0F))
                 .then(cfgFloat("release", "exhausted_release_threshold", StaminaServerConfig.EXHAUSTED_RELEASE_THRESHOLD, 0.0F, 1_000_000.0F))
+                .then(cfgBool("block-jump", "exhausted_block_jump", StaminaServerConfig.EXHAUSTED_BLOCK_JUMP))
                 .then(cfgInt("delay", "delay_ticks", StaminaServerConfig.RECOVERY_DELAY_TICKS, 0, 1_200))
                 .then(cfgInt("delay-exhausted", "exhausted_delay_ticks", StaminaServerConfig.EXHAUSTED_RECOVERY_DELAY_TICKS, 0, 1_200));
     }
@@ -208,6 +213,14 @@ public final class StaminaCommands {
                 .then(Commands.argument("value", IntegerArgumentType.integer(min, max))
                         .executes(ctx -> setConfigInt(ctx.getSource(), key, value,
                                 IntegerArgumentType.getInteger(ctx, "value"))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> cfgBool(
+            String literal, String key, ModConfigSpec.BooleanValue value) {
+        return Commands.literal(literal)
+                .then(Commands.argument("value", BoolArgumentType.bool())
+                        .executes(ctx -> setConfigBool(ctx.getSource(), key, value,
+                                BoolArgumentType.getBool(ctx, "value"))));
     }
 
     // ------------------------------------------------------------------ 处理器
@@ -314,6 +327,15 @@ public final class StaminaCommands {
         return 1;
     }
 
+    private static int setConfigBool(CommandSourceStack source, String key,
+                                      ModConfigSpec.BooleanValue value, boolean newValue) {
+        value.set(newValue);
+        StaminaServerConfig.SPEC.save();
+        source.sendSuccess(() -> Component.translatable("herra_stamina.command.config.set",
+                key, String.valueOf(newValue)), true);
+        return 1;
+    }
+
     private static int showConfig(CommandSourceStack source) {
         source.sendSuccess(() -> Component.translatable("herra_stamina.command.config.show.header"), false);
         sendConfigLine(source, "max_stamina", fmt(StaminaServerConfig.f(StaminaServerConfig.MAX_STAMINA)));
@@ -321,12 +343,15 @@ public final class StaminaCommands {
         sendConfigLine(source, "jump_cost", fmt(StaminaServerConfig.f(StaminaServerConfig.JUMP_COST)));
         sendConfigLine(source, "swim_per_second", fmt(StaminaServerConfig.f(StaminaServerConfig.SWIM_DRAIN_PER_SECOND)));
         sendConfigLine(source, "swim_sprint_per_second", fmt(StaminaServerConfig.f(StaminaServerConfig.SWIM_SPRINT_DRAIN_PER_SECOND)));
+        sendConfigLine(source, "attack_cost", fmt(StaminaServerConfig.f(StaminaServerConfig.ATTACK_COST)));
+        sendConfigLine(source, "break_block_cost", fmt(StaminaServerConfig.f(StaminaServerConfig.BREAK_BLOCK_COST)));
         sendConfigLine(source, "recovery.per_second", fmt(StaminaServerConfig.f(StaminaServerConfig.RECOVERY_PER_SECOND)));
         sendConfigLine(source, "recovery.exhausted_per_second", fmt(StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_RECOVERY_PER_SECOND)));
         sendConfigLine(source, "recovery.delay_ticks", String.valueOf(StaminaServerConfig.RECOVERY_DELAY_TICKS.get()));
         sendConfigLine(source, "recovery.exhausted_delay_ticks", String.valueOf(StaminaServerConfig.EXHAUSTED_RECOVERY_DELAY_TICKS.get()));
         sendConfigLine(source, "penalty.sprint_stop_threshold", fmt(StaminaServerConfig.f(StaminaServerConfig.SPRINT_STOP_THRESHOLD)));
         sendConfigLine(source, "penalty.exhausted_release_threshold", fmt(StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_RELEASE_THRESHOLD)));
+        sendConfigLine(source, "penalty.exhausted_block_jump", String.valueOf(StaminaServerConfig.EXHAUSTED_BLOCK_JUMP.get()));
         return 1;
     }
 

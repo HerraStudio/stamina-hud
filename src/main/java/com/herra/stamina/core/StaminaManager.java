@@ -1,10 +1,15 @@
 package com.herra.stamina.core;
 
+import com.herra.stamina.HerraStamina;
 import com.herra.stamina.api.StaminaAction;
 import com.herra.stamina.api.StaminaAPI;
 import com.herra.stamina.api.event.StaminaEvent;
 import com.herra.stamina.config.StaminaServerConfig;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -18,11 +23,6 @@ public final class StaminaManager {
 
     /** 每服务端 tick 对每个玩家调用一次。 */
     public static void tickPlayer(ServerPlayer player) {
-        boolean creative = player.isCreative() || player.isSpectator();
-        if (creative && !StaminaServerConfig.APPLY_IN_CREATIVE.get()) {
-            return; // 创造模式不消耗、不恢复（HUD 客户端自动隐藏）
-        }
-
         StaminaData st = StaminaData.of(player);
 
         // ---- 修改器倒计时（到期自动失效，上限可能变化） ----
@@ -33,9 +33,26 @@ public final class StaminaManager {
         // 服务端玩家的 deltaMovement 不随输入更新（Entity.move 只写坐标），
         // 用它判断“是否在移动”会恒为 false —— 这是 v1.0.0 疾跑不消耗的原因。
         boolean moving = st.updateMovement(player);
+        boolean creative = player.isCreative() || player.isSpectator();
+        if (!creative || StaminaServerConfig.APPLY_IN_CREATIVE.get()) {
+            tickRules(player, st, moving);
+        }
+
+        // 透支惩罚（跳跃禁止属性修饰符）必须在创造/旁观分支之外处理：
+        // 创造模式下锁定不可能为 true，此调用负责摘除切模式前残留的修饰符。
+        updateExhaustionEffects(player, st, creative);
+
+        maybeSync(player, st, false);
+    }
+
+    /** 体力规则主体（消耗 / 恢复 / 禁跑兜底）。 */
+    private static void tickRules(ServerPlayer player, StaminaData st, boolean moving) {
         float drain = 0.0F;
         StaminaAction action = StaminaAction.SPRINT;
-        if (player.isInWater() && player.isSwimming()) {
+        if (player.isInWater() && player.isSwimming()
+                && (moving || st.movedVertically())) {
+            // 游泳（爬泳姿势）：水平或垂直主动位移都算消耗（下潜/上浮）；
+            // 垂直分量用较大阈值排除水中被动下沉。
             action = player.isSprinting()
                     ? StaminaAction.SWIM_SPRINT : StaminaAction.SWIM;
             drain = action == StaminaAction.SWIM_SPRINT
@@ -43,6 +60,8 @@ public final class StaminaManager {
                     : StaminaServerConfig.f(StaminaServerConfig.SWIM_DRAIN_PER_SECOND);
         } else if (player.isSprinting()
                 && !player.getAbilities().flying
+                && !player.isFallFlying()   // 滑翔不是疾跑
+                && !player.isPassenger()    // 骑乘时是坐骑在跑，骑手不消耗
                 && moving) {
             action = StaminaAction.SPRINT;
             drain = StaminaServerConfig.f(StaminaServerConfig.SPRINT_DRAIN_PER_SECOND);
@@ -58,13 +77,45 @@ public final class StaminaManager {
             st.setTicksSinceConsumption(st.getTicksSinceConsumption() + 1);
         }
 
-        // ---- 低体力禁跑（服务端权威压制；客户端按同步标志镜像，避免疾跑 FOV 抖动） ----
+        // ---- 低体力禁跑（服务端权威兜底；客户端由 LocalPlayerMixin 在
+        // 原版饥饿禁跑的同一判定点镜像压制，避免疾跑 FOV 抖动） ----
         if (player.isSprinting() && !StaminaAPI.canSprint(player)) {
             player.setSprinting(false);
         }
-
-        maybeSync(player, st, false);
     }
+
+    // ------------------------------------------------------------------ 透支惩罚
+
+    /**
+     * 透支锁定期禁止跳跃：给 JUMP_STRENGTH 挂负向修饰符（钳制到 0）。
+     *
+     * <p>JUMP_STRENGTH 是同步属性（骑马跳跃即依赖此机制），修饰符会自动
+     * 同步到客户端 —— 客户端 jumpFromGround() 的 {@code f <= 1.0E-5} 守卫
+     * 直接跳过，两端一致、无橡皮筋。跳跃药水在透支期间仍会带来 0.1/级
+     * 的微小弹跳（原版公式加算），可接受。</p>
+     *
+     * <p>幂等：每 tick 调用，状态与修饰符对齐即可；登录/重生/换维度后
+     * 新实体无修饰符，锁定状态也不会跨体保留，自愈。</p>
+     */
+    private static void updateExhaustionEffects(ServerPlayer player, StaminaData st, boolean creative) {
+        boolean blockJump = st.isExhaustedLock()
+                && StaminaServerConfig.EXHAUSTED_BLOCK_JUMP.get()
+                && (!creative || StaminaServerConfig.APPLY_IN_CREATIVE.get());
+        AttributeInstance jump = player.getAttribute(Attributes.JUMP_STRENGTH);
+        if (jump == null) {
+            return; // 理论上玩家实体必定有该属性（LivingEntity 基础属性表）
+        }
+        boolean present = jump.hasModifier(JUMP_BLOCK_ID);
+        if (blockJump && !present) {
+            jump.addTransientModifier(JUMP_BLOCK_MODIFIER);
+        } else if (!blockJump && present) {
+            jump.removeModifier(JUMP_BLOCK_ID);
+        }
+    }
+
+    private static final ResourceLocation JUMP_BLOCK_ID = HerraStamina.id("exhausted_jump_block");
+    private static final AttributeModifier JUMP_BLOCK_MODIFIER = new AttributeModifier(
+            JUMP_BLOCK_ID, -1024.0, AttributeModifier.Operation.ADD_VALUE);
 
     // ------------------------------------------------------------------ 恢复
 
@@ -145,7 +196,8 @@ public final class StaminaManager {
 
     /** 跳跃消耗：NeoForge 1.21.1 的 LivingJumpEvent 不可取消， 因此策略为
      * 「允许跳跃、一次性扣到空」——战术上允许最后一丝体力赌命跳，
-     * 代价是直接进入透支锁定。 */
+     * 代价是直接进入透支锁定。透支锁定期间跳跃被 JUMP_STRENGTH 修饰符
+     * 整体禁止（见 updateExhaustionEffects），事件不会再触发。 */
     public static void handleJump(ServerPlayer player) {
         if (player.isCreative() || player.isSpectator()) {
             return;
@@ -157,6 +209,38 @@ public final class StaminaManager {
             return;
         }
         drain(player, cost, StaminaAction.JUMP, false);
+    }
+
+    /** 近战攻击命中实体的一次性消耗（AttackEntityEvent，仅服务端结算）。 */
+    public static void handleAttack(ServerPlayer player) {
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
+        float base = StaminaServerConfig.f(StaminaServerConfig.ATTACK_COST);
+        if (base <= 0.0F) {
+            return; // 配置关闭
+        }
+        float cost = StaminaAPI.applyDrainModifiers(player, StaminaAction.ATTACK, base);
+        if (cost <= 0.0F) {
+            return;
+        }
+        drain(player, cost, StaminaAction.ATTACK, false);
+    }
+
+    /** 破坏方块的一次性消耗（BlockEvent.BreakEvent，仅服务端触发）。 */
+    public static void handleBreakBlock(ServerPlayer player) {
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
+        float base = StaminaServerConfig.f(StaminaServerConfig.BREAK_BLOCK_COST);
+        if (base <= 0.0F) {
+            return; // 配置关闭
+        }
+        float cost = StaminaAPI.applyDrainModifiers(player, StaminaAction.BREAK_BLOCK, base);
+        if (cost <= 0.0F) {
+            return;
+        }
+        drain(player, cost, StaminaAction.BREAK_BLOCK, false);
     }
 
     // ------------------------------------------------------------------ 直接设置（API / 指令用）

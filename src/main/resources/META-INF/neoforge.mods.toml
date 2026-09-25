@@ -6,15 +6,16 @@ displayTest = "IGNORE_SERVER_VERSION"
 
 [[mods]]
 modId = "herra_stamina"
-version = "1.0.0"
+version = "1.0.1"
 displayName = "HERRA Stamina"
 authors = "HERRA Team"
 logoFile = "herra_stamina_logo.png"
 description = '''
 Standalone tactical stamina system for the HERRA extraction-shooter modpack.
-Sprint / jump / swim stamina costs, delayed regeneration with an exhaustion
-lock, low-stamina sprint blocking, and a pixel-art animated stamina HUD
-(ghost drain trail, sparks, glint) built on LDLib2 - above the hotbar.
+Sprint / jump / swim / attack / mining stamina costs, delayed regeneration
+with an exhaustion lock (no sprint, no jump), low-stamina sprint blocking,
+and a pixel-art animated stamina HUD (ghost drain trail, sparks, glint)
+built on LDLib2 - above the hotbar.
 '''
 
 [[dependencies.herra_stamina]]
@@ -38,3 +39,7 @@ lock, low-stamina sprint blocking, and a pixel-art animated stamina HUD
     versionRange = "[2.2.1,)"
     ordering = "NONE"
     side = "BOTH"
+
+# Client-side mixin: sprint blocking at the vanilla hunger-check point
+[[mixins]]
+config = "herra_stamina.mixins.json"
