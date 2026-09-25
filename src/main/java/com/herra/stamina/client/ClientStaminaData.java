@@ -88,10 +88,15 @@ public final class ClientStaminaData {
 
     public static void acceptSync(StaminaSyncPayload payload) {
         float oldTarget = initialized ? target : payload.stamina();
+        boolean wasExhausted = exhaustedLock;
         max = Math.max(1.0F, payload.maxStamina());
         target = Mth.clamp(payload.stamina(), 0.0F, max);
         exhaustedLock = payload.exhaustedLock();
         sprintBlocked = payload.sprintBlocked();
+        // 体力耗尽瞬间：播提示音（音量/开关走客户端配置）
+        if (!wasExhausted && exhaustedLock && initialized) {
+            StaminaSounds.playExhausted();
+        }
         if (!initialized) {
             display = ghost = target;
             initialized = true;

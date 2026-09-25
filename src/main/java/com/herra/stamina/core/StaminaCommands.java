@@ -5,13 +5,13 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.herra.stamina.api.StaminaAPI;
 import com.herra.stamina.api.StaminaModifier;
 import com.herra.stamina.config.StaminaServerConfig;
+import com.herra.stamina.network.OpenSettingsPayload;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -25,23 +25,30 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * /stamina —— 游戏内数值调节指令。
+ * 游戏内指令（v1.0.2 双入口设计）。
  *
  * <pre>
- * /stamina [info] [player]              查看体力状态（查看他人需 OP 2）
- * /stamina set &lt;player&gt; &lt;value&gt;        设置体力（OP 2）
- * /stamina add &lt;player&gt; &lt;value&gt;        增减体力，可为负（OP 2）
- * /stamina exhaust &lt;player&gt;            清空并进入透支锁定，测试惩罚（OP 2）
- * /stamina reset &lt;player&gt;              回满（OP 2）
- * /stamina modifier list [player]       生效中的修改器（OP 2）
- * /stamina modifier clear &lt;player&gt;      清空修改器（OP 2）
- * /stamina modifier give &lt;player&gt; &lt;id&gt; &lt;seconds&gt; [drainMultiplier] [maxBonus] [regenBonus]
- *                                      测试生态接口（与医药模组同路径，OP 2）
- * /stamina config show                  查看服务器数值（OP 2）
- * /stamina config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
- *                    attack-cost|break-cost|regen|regen-exhausted|delay|
- *                    delay-exhausted|sprint-stop|release|block-jump &lt;value&gt;
- *                                      调节并写入配置（OP 2）
+ * /sta                              打开体力设置界面（玩家级：位置/样式/提示音/显示）
+ * /sta ui                           同上（别名）
+ * /sta help                         指令帮助（玩家级）
+ * /stamina                          查看自己的体力值（唯一需要打全称的玩家级指令）
+ *
+ * ---- 以下子命令均需 OP 2（涉及数值修改） ----
+ * /sta info &lt;player&gt;               查看指定玩家体力状态
+ * /sta set &lt;player&gt; &lt;value&gt;         设置体力
+ * /sta add &lt;player&gt; &lt;value&gt;         增减体力，可为负
+ * /sta exhaust &lt;player&gt;             清空并进入透支锁定（测试惩罚）
+ * /sta reset &lt;player&gt;               回满
+ * /sta modifier list [player]       生效中的修改器
+ * /sta modifier clear &lt;player&gt;      清空修改器
+ * /sta modifier give &lt;player&gt; &lt;id&gt; &lt;seconds&gt; [drainMultiplier] [maxBonus] [regenBonus]
+ *                                  测试生态接口（与医药模组同路径）
+ * /sta config show                  查看服务器数值
+ * /sta config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
+ *              attack-cost|break-cost|regen|regen-exhausted|delay|
+ *              delay-exhausted|sprint-stop|release|block-jump|
+ *              block-sprint|walk-slowdown|winded-block-jump &lt;value&gt;
+ *                                  调节并写入配置
  * </pre>
  *
  * <p>config 子指令直接修改 SERVER 配置并保存到
@@ -51,13 +58,19 @@ public final class StaminaCommands {
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(build());
+        event.getDispatcher().register(buildSta());
+        event.getDispatcher().register(buildStamina());
     }
 
-    /** 指令树根。每个分支拆成独立方法，避免深层括号嵌套。 */
-    private static LiteralArgumentBuilder<CommandSourceStack> build() {
-        return Commands.literal("stamina")
-                .executes(ctx -> info(ctx.getSource(), ctx.getSource().getPlayerOrException()))
+    /** /sta —— 短入口：设置菜单（玩家级）+ 全部管理子命令（OP 2）。 */
+    private static LiteralArgumentBuilder<CommandSourceStack> buildSta() {
+        return Commands.literal("sta")
+                // 玩家级：直接打开设置界面
+                .executes(StaminaCommands::openMenu)
+                .then(Commands.literal("ui")
+                        .executes(StaminaCommands::openMenu))
+                .then(Commands.literal("help")
+                        .executes(StaminaCommands::help))
                 .then(infoNode())
                 .then(setNode())
                 .then(addNode())
@@ -67,13 +80,42 @@ public final class StaminaCommands {
                 .then(configNode());
     }
 
+    /** /stamina —— 全称入口：仅查看自己的体力（玩家级）。 */
+    private static LiteralArgumentBuilder<CommandSourceStack> buildStamina() {
+        return Commands.literal("stamina")
+                .executes(ctx -> info(ctx.getSource(), ctx.getSource().getPlayerOrException()));
+    }
+
+    // ------------------------------------------------------------------ 菜单 / 帮助
+
+    /** 打开设置界面：发包到客户端弹 StaminaSettingsScreen（纯本地调整，零权限）。 */
+    private static int openMenu(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        OpenSettingsPayload.sendTo(player);
+        ctx.getSource().sendSuccess(
+                () -> Component.translatable("herra_stamina.command.menu.opening"), false);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int help(CommandContext<CommandSourceStack> ctx) {
+        var source = ctx.getSource();
+        source.sendSuccess(() -> Component.translatable("herra_stamina.command.help.header"), false);
+        source.sendSuccess(() -> Component.translatable("herra_stamina.command.help.menu"), false);
+        source.sendSuccess(() -> Component.translatable("herra_stamina.command.help.self"), false);
+        source.sendSuccess(() -> Component.translatable("herra_stamina.command.help.admin"), false);
+        if (source.hasPermission(2)) {
+            source.sendSuccess(() -> Component.translatable("herra_stamina.command.help.op"), false);
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
     // ------------------------------------------------------------------ info
 
     private static LiteralArgumentBuilder<CommandSourceStack> infoNode() {
+        // /sta info <player> —— 查看他人需 OP 2（自查请用 /stamina）
         return Commands.literal("info")
-                .executes(ctx -> info(ctx.getSource(), ctx.getSource().getPlayerOrException()))
+                .requires(src -> src.hasPermission(2))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .requires(src -> src.hasPermission(2))
                         .executes(ctx -> info(ctx.getSource(), EntityArgument.getPlayer(ctx, "player"))));
     }
 
@@ -194,7 +236,10 @@ public final class StaminaCommands {
                 .then(cfgFloat("regen-exhausted", "exhausted_per_second", StaminaServerConfig.EXHAUSTED_RECOVERY_PER_SECOND, 0.0F, 100_000.0F))
                 .then(cfgFloat("sprint-stop", "sprint_stop_threshold", StaminaServerConfig.SPRINT_STOP_THRESHOLD, 0.0F, 1_000_000.0F))
                 .then(cfgFloat("release", "exhausted_release_threshold", StaminaServerConfig.EXHAUSTED_RELEASE_THRESHOLD, 0.0F, 1_000_000.0F))
+                .then(cfgFloat("walk-slowdown", "exhausted_walk_slowdown", StaminaServerConfig.EXHAUSTED_WALK_SLOWDOWN, 0.0F, 0.6F))
                 .then(cfgBool("block-jump", "exhausted_block_jump", StaminaServerConfig.EXHAUSTED_BLOCK_JUMP))
+                .then(cfgBool("block-sprint", "exhausted_block_sprint", StaminaServerConfig.EXHAUSTED_BLOCK_SPRINT))
+                .then(cfgBool("winded-block-jump", "winded_block_jump", StaminaServerConfig.WINDED_BLOCK_JUMP))
                 .then(cfgInt("delay", "delay_ticks", StaminaServerConfig.RECOVERY_DELAY_TICKS, 0, 1_200))
                 .then(cfgInt("delay-exhausted", "exhausted_delay_ticks", StaminaServerConfig.EXHAUSTED_RECOVERY_DELAY_TICKS, 0, 1_200));
     }
@@ -263,7 +308,7 @@ public final class StaminaCommands {
     }
 
     /**
-     * /stamina modifier give &lt;player&gt; &lt;id&gt; &lt;seconds&gt; [drainMultiplier] [maxBonus] [regenBonus]
+     * /sta modifier give &lt;player&gt; &lt;id&gt; &lt;seconds&gt; [drainMultiplier] [maxBonus] [regenBonus]
      * 例：60 秒内消耗减半、上限+30、恢复+5/s —— 与医药模组的 API 调用完全同路径。
      */
     private static int giveModifier(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
@@ -314,7 +359,7 @@ public final class StaminaCommands {
         value.set((double) newValue);
         StaminaServerConfig.SPEC.save();
         source.sendSuccess(() -> Component.translatable("herra_stamina.command.config.set",
-                key, fmt(newValue)), true);
+                key, fmtCfg(newValue)), true);
         return 1;
     }
 
@@ -352,6 +397,9 @@ public final class StaminaCommands {
         sendConfigLine(source, "penalty.sprint_stop_threshold", fmt(StaminaServerConfig.f(StaminaServerConfig.SPRINT_STOP_THRESHOLD)));
         sendConfigLine(source, "penalty.exhausted_release_threshold", fmt(StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_RELEASE_THRESHOLD)));
         sendConfigLine(source, "penalty.exhausted_block_jump", String.valueOf(StaminaServerConfig.EXHAUSTED_BLOCK_JUMP.get()));
+        sendConfigLine(source, "penalty.exhausted_block_sprint", String.valueOf(StaminaServerConfig.EXHAUSTED_BLOCK_SPRINT.get()));
+        sendConfigLine(source, "penalty.exhausted_walk_slowdown", fmt(StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_WALK_SLOWDOWN)));
+        sendConfigLine(source, "penalty.winded_block_jump", String.valueOf(StaminaServerConfig.WINDED_BLOCK_JUMP.get()));
         return 1;
     }
 
@@ -362,6 +410,14 @@ public final class StaminaCommands {
 
     private static String fmt(float value) {
         return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    /** config 数值显示：一位小数可精确表示用 %.1f，否则 %.2f（如 0.15）。 */
+    private static String fmtCfg(float value) {
+        boolean oneDecimalExact = Math.abs(value * 10.0F - Math.round(value * 10.0F)) < 1.0e-3F;
+        return oneDecimalExact
+                ? String.format(Locale.ROOT, "%.1f", value)
+                : String.format(Locale.ROOT, "%.2f", value);
     }
 
     private StaminaCommands() {

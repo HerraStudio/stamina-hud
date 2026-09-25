@@ -17,7 +17,9 @@ import net.minecraft.util.Mth;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 体力条 HUD 根元素（全屏透明层，内部自行定位）。
@@ -34,29 +36,40 @@ import java.util.List;
  *   <li>下方：身体状态占位图标 或 呼吸急促/体力透支 文字</li>
  * </ol>
  *
- * <p>贴图几何与 gen_textures.py 严格对应：BAR 100x12，边框 2px，内部 96x8。</p>
+ * <p>v1.0.2：全部外观由 {@link BarStyle} 预设驱动（4 种皮肤），
+ * 并支持整体缩放（pose 矩阵，像素几何不变）。</p>
+ *
+ * <p>贴图几何与 gen_textures.py / gen_bar_styles.py 严格对应：BAR 100x12，边框 2px，内部 96x8。</p>
  */
 @OnlyIn(Dist.CLIENT)
 public class StaminaHudElement extends UIElement {
 
-    // ---- 贴图几何（与 resources 内 PNG 一致） ----
+    // ---- 贴图几何（与 resources 内 PNG 一致，全部样式共用） ----
     public static final int BAR_W = 100;
     public static final int BAR_H = 12;
     public static final int BORDER = 2;
     public static final int INNER_W = BAR_W - BORDER * 2; // 96
     public static final int INNER_H = BAR_H - BORDER * 2; // 8
 
-    private static final ResourceLocation FRAME_TEX_LOC = HerraStamina.id("textures/gui/stamina_frame.png");
-    private static final ResourceLocation SHADE_TEX_LOC = HerraStamina.id("textures/gui/stamina_fill_shade.png");
     private static final ResourceLocation BOLT_TEX_LOC = HerraStamina.id("textures/gui/stamina_icon.png");
     private static final ResourceLocation BODY_HEAD = HerraStamina.id("textures/gui/body_head.png");
     private static final ResourceLocation BODY_CHEST = HerraStamina.id("textures/gui/body_chest.png");
     private static final ResourceLocation BODY_ARMS = HerraStamina.id("textures/gui/body_arms.png");
     private static final ResourceLocation BODY_LEGS = HerraStamina.id("textures/gui/body_legs.png");
 
-    // 可复用的纹理实例（渲染线程内安全变更颜色/子区域）
-    private static final SpriteTexture FRAME = new SpriteTexture().setImageLocation(FRAME_TEX_LOC);
-    private static final SpriteTexture SHADE = new SpriteTexture().setImageLocation(SHADE_TEX_LOC);
+    // 可复用的纹理实例（渲染线程内安全变更颜色/子区域）。
+    // 每个样式独立缓存边框/叠加层，切换样式零重建开销。
+    private static final Map<BarStyle, SpriteTexture> FRAMES = new EnumMap<>(BarStyle.class);
+    private static final Map<BarStyle, SpriteTexture> SHADES = new EnumMap<>(BarStyle.class);
+
+    private static SpriteTexture frame(BarStyle style) {
+        return FRAMES.computeIfAbsent(style, s -> new SpriteTexture().setImageLocation(s.frame()));
+    }
+
+    private static SpriteTexture shade(BarStyle style) {
+        return SHADES.computeIfAbsent(style, s -> new SpriteTexture().setImageLocation(s.shade()));
+    }
+
     private static final SpriteTexture BOLT = new SpriteTexture().setImageLocation(BOLT_TEX_LOC);
     private static final SpriteTexture BODY_HEAD_TEX = new SpriteTexture().setImageLocation(BODY_HEAD);
     private static final SpriteTexture BODY_CHEST_TEX = new SpriteTexture().setImageLocation(BODY_CHEST);
@@ -66,24 +79,28 @@ public class StaminaHudElement extends UIElement {
     private static final Component TEXT_WINDED = Component.translatable("herra_stamina.hud.winded");
     private static final Component TEXT_EXHAUSTED = Component.translatable("herra_stamina.hud.exhausted");
 
-    // ---- 配色（与预览图一致） ----
+    // ---- 配色 ----
     private static final int BG_EMPTY = argb(255, 13, 15, 19);
 
-    // 四段渐变配色（可配置，默认：米白→金黄→橙→红）
+    // 四段渐变配色（由当前样式预设决定；CLASSIC 走客户端配置）
+    private static BarStyle style() {
+        return BarStyle.current();
+    }
+
     private static int colorFull() {
-        return StaminaClientConfig.COLOR_FULL.get() & 0xFFFFFF;
+        return style().colorFull();
     }
 
     private static int colorMid() {
-        return StaminaClientConfig.COLOR_MID.get() & 0xFFFFFF;
+        return style().colorMid();
     }
 
     private static int colorLow() {
-        return StaminaClientConfig.COLOR_LOW.get() & 0xFFFFFF;
+        return style().colorLow();
     }
 
     private static int colorCrit() {
-        return StaminaClientConfig.COLOR_CRIT.get() & 0xFFFFFF;
+        return style().colorCrit();
     }
 
     private static final int RGB_SPARK = rgb(0xFF, 0xFF, 0xFF);
@@ -109,16 +126,26 @@ public class StaminaHudElement extends UIElement {
         GuiGraphics g = ctx.graphics;
         int screenW = mc.getWindow().getGuiScaledWidth();
         int screenH = mc.getWindow().getGuiScaledHeight();
-        int x = screenW / 2 - BAR_W / 2 + StaminaClientConfig.HUD_OFFSET_X.get();
-        int y = screenH - StaminaClientConfig.HUD_OFFSET_Y.get();
+        float scale = Mth.clamp(StaminaClientConfig.HUD_SCALE.get().floatValue(), 0.5F, 2.0F);
+        // 缩放后条的实际占位（定位基准 = 缩放后底边中点）
+        int drawW = Math.round(BAR_W * scale);
+        int x = Math.round(screenW / 2.0F - drawW / 2.0F
+                + StaminaClientConfig.HUD_OFFSET_X.get() * scale);
+        int y = Math.round(screenH - StaminaClientConfig.HUD_OFFSET_Y.get() * scale);
 
-        renderBar(g, ctx, x, y, alpha);
-        renderBelow(g, ctx, mc.font, x, y, alpha);
+        // 整体缩放：translate 到条左上角再 scale，内部几何全部保持像素常量
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1.0F);
+        renderBar(g, ctx, 0, 0, alpha);
+        renderBelow(g, ctx, mc.font, 0, 0, alpha);
+        g.pose().popPose();
     }
 
     // ------------------------------------------------------------------ 主条
 
     private void renderBar(GuiGraphics g, GUIContext ctx, int x, int y, float alpha) {
+        BarStyle style = style();
         int innerX = x + BORDER;
         int innerY = y + BORDER;
         float ratio = ClientStaminaData.getRatio();
@@ -138,10 +165,11 @@ public class StaminaHudElement extends UIElement {
                 g.fill(innerX + fillW + i, innerY, innerX + fillW + i + 1, innerY + INNER_H, c);
             }
             // 拖尾区也叠刻痕纹理（保持整体感）
-            SHADE.setColor(mulAlpha(0xFFFFFFFF, alpha));
-            SHADE.setSpritePosition(Position.of(fillW, 0));
-            SHADE.setSpriteSize(Size.of(span, INNER_H));
-            ctx.drawTexture(SHADE, innerX + fillW, innerY, span, INNER_H);
+            SpriteTexture shadeTex = shade(style);
+            shadeTex.setColor(mulAlpha(0xFFFFFFFF, alpha));
+            shadeTex.setSpritePosition(Position.of(fillW, 0));
+            shadeTex.setSpriteSize(Size.of(span, INNER_H));
+            ctx.drawTexture(shadeTex, innerX + fillW, innerY, span, INNER_H);
         }
 
         // 3. 主体填充
@@ -153,17 +181,19 @@ public class StaminaHudElement extends UIElement {
             int capX = innerX + Math.max(0, fillW - 2);
             g.fill(capX, innerY, innerX + fillW, innerY + INNER_H, cap);
             // 纹理叠加层（只叠加到填充宽度，1:1 采样无拉伸）
-            SHADE.setColor(mulAlpha(0xFFFFFFFF, alpha));
-            SHADE.setSpritePosition(Position.of(0, 0));
-            SHADE.setSpriteSize(Size.of(fillW, INNER_H));
-            ctx.drawTexture(SHADE, innerX, innerY, fillW, INNER_H);
+            SpriteTexture shadeTex = shade(style);
+            shadeTex.setColor(mulAlpha(0xFFFFFFFF, alpha));
+            shadeTex.setSpritePosition(Position.of(0, 0));
+            shadeTex.setSpriteSize(Size.of(fillW, INNER_H));
+            ctx.drawTexture(shadeTex, innerX, innerY, fillW, INNER_H);
         }
 
         // 4. 边框（随整体淡出）
-        FRAME.setColor(mulAlpha(0xFFFFFFFF, alpha));
-        FRAME.setSpritePosition(Position.of(0, 0));
-        FRAME.setSpriteSize(Size.of(BAR_W, BAR_H));
-        ctx.drawTexture(FRAME, x, y, BAR_W, BAR_H);
+        SpriteTexture frameTex = frame(style);
+        frameTex.setColor(mulAlpha(0xFFFFFFFF, alpha));
+        frameTex.setSpritePosition(Position.of(0, 0));
+        frameTex.setSpriteSize(Size.of(BAR_W, BAR_H));
+        ctx.drawTexture(frameTex, x, y, BAR_W, BAR_H);
 
         // 5. 闪电图标（染当前填充色）
         if (StaminaClientConfig.SHOW_ICON.get()) {

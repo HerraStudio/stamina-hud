@@ -7,11 +7,17 @@ import com.herra.stamina.api.event.StaminaEvent;
 import com.herra.stamina.config.StaminaServerConfig;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.common.NeoForge;
+
+import javax.annotation.Nullable;
+
+import javax.annotation.Nullable;
 
 /**
  * 全部服务端体力规则。由 {@link StaminaGameEvents} 每玩家 tick 驱动，
@@ -98,24 +104,56 @@ public final class StaminaManager {
      * 新实体无修饰符，锁定状态也不会跨体保留，自愈。</p>
      */
     private static void updateExhaustionEffects(ServerPlayer player, StaminaData st, boolean creative) {
-        boolean blockJump = st.isExhaustedLock()
+        boolean penaltiesApply = !creative || StaminaServerConfig.APPLY_IN_CREATIVE.get();
+        boolean exhaustedBlockJump = st.isExhaustedLock()
                 && StaminaServerConfig.EXHAUSTED_BLOCK_JUMP.get()
-                && (!creative || StaminaServerConfig.APPLY_IN_CREATIVE.get());
-        AttributeInstance jump = player.getAttribute(Attributes.JUMP_STRENGTH);
-        if (jump == null) {
-            return; // 理论上玩家实体必定有该属性（LivingEntity 基础属性表）
+                && penaltiesApply;
+        boolean windedBlockJump = penaltiesApply
+                && StaminaServerConfig.WINDED_BLOCK_JUMP.get()
+                && st.isSprintBlocked();      // 低体力（含透支）禁跳选项
+        boolean blockJump = exhaustedBlockJump || windedBlockJump;
+        applyToggleModifier(player.getAttribute(Attributes.JUMP_STRENGTH),
+                JUMP_BLOCK_ID, JUMP_BLOCK_MODIFIER, blockJump);
+
+        // 透支减速（默认 0 = 不减速，只能正常行走）
+        float slowdown = st.isExhaustedLock() && penaltiesApply
+                ? StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_WALK_SLOWDOWN)
+                : 0.0F;
+        boolean applySlow = slowdown > 0.001F;
+        AttributeModifier slowModifier = applySlow
+                ? new AttributeModifier(SLOWDOWN_ID, 1.0 - Mth.clamp(slowdown, 0.0F, 0.6F),
+                        AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL)
+                : null;
+        applyToggleModifier(player.getAttribute(Attributes.MOVEMENT_SPEED),
+                SLOWDOWN_ID, slowModifier, applySlow);
+    }
+
+    /** 幂等挂/摘属性修饰符；数值变化时重挂（支持运行中改配置）；want=false 时清理残留。 */
+    private static void applyToggleModifier(AttributeInstance attribute,
+                                            ResourceLocation id,
+                                            @Nullable AttributeModifier modifier,
+                                            boolean want) {
+        if (attribute == null) {
+            return;
         }
-        boolean present = jump.hasModifier(JUMP_BLOCK_ID);
-        if (blockJump && !present) {
-            jump.addTransientModifier(JUMP_BLOCK_MODIFIER);
-        } else if (!blockJump && present) {
-            jump.removeModifier(JUMP_BLOCK_ID);
+        AttributeModifier existing = attribute.getModifier(id);
+        if (want && modifier != null) {
+            if (existing == null) {
+                attribute.addTransientModifier(modifier);
+            } else if (existing.amount() != modifier.amount()) {
+                // 配置运行中被修改：摘旧挂新
+                attribute.removeModifier(id);
+                attribute.addTransientModifier(modifier);
+            }
+        } else if (existing != null) {
+            attribute.removeModifier(id);
         }
     }
 
     private static final ResourceLocation JUMP_BLOCK_ID = HerraStamina.id("exhausted_jump_block");
     private static final AttributeModifier JUMP_BLOCK_MODIFIER = new AttributeModifier(
             JUMP_BLOCK_ID, -1024.0, AttributeModifier.Operation.ADD_VALUE);
+    private static final ResourceLocation SLOWDOWN_ID = HerraStamina.id("exhausted_walk_slowdown");
 
     // ------------------------------------------------------------------ 恢复
 
@@ -145,6 +183,9 @@ public final class StaminaManager {
         if (lock && now >= StaminaServerConfig.f(StaminaServerConfig.EXHAUSTED_RELEASE_THRESHOLD)) {
             st.setExhaustedLock(false);
             NeoForge.EVENT_BUS.post(new StaminaEvent.Recovered(player));
+            // 解锁瞬间零延迟同步：客户端立即恢复疾跑（不等待节流冷却）
+            st.sendTo(player);
+            st.setSyncCooldown(StaminaServerConfig.SYNC_INTERVAL_TICKS.get());
         }
     }
 
@@ -189,6 +230,11 @@ public final class StaminaManager {
         if (now <= 0.0001F && !st.isExhaustedLock()) {
             st.setExhaustedLock(true);
             NeoForge.EVENT_BUS.post(new StaminaEvent.Exhausted(player));
+            // 透支瞬间零延迟同步：客户端立即进入禁跑禁跳状态（不等待节流冷却）
+            if (player instanceof ServerPlayer serverPlayer) {
+                st.sendTo(serverPlayer);
+                st.setSyncCooldown(StaminaServerConfig.SYNC_INTERVAL_TICKS.get());
+            }
         }
         NeoForge.EVENT_BUS.post(new StaminaEvent.Changed(player, current, now));
         return cost;
@@ -199,7 +245,7 @@ public final class StaminaManager {
      * 代价是直接进入透支锁定。透支锁定期间跳跃被 JUMP_STRENGTH 修饰符
      * 整体禁止（见 updateExhaustionEffects），事件不会再触发。 */
     public static void handleJump(ServerPlayer player) {
-        if (player.isCreative() || player.isSpectator()) {
+        if (skipByGameMode(player)) {
             return;
         }
         float base = StaminaServerConfig.f(StaminaServerConfig.JUMP_COST);
@@ -213,7 +259,7 @@ public final class StaminaManager {
 
     /** 近战攻击命中实体的一次性消耗（AttackEntityEvent，仅服务端结算）。 */
     public static void handleAttack(ServerPlayer player) {
-        if (player.isCreative() || player.isSpectator()) {
+        if (skipByGameMode(player)) {
             return;
         }
         float base = StaminaServerConfig.f(StaminaServerConfig.ATTACK_COST);
@@ -229,7 +275,7 @@ public final class StaminaManager {
 
     /** 破坏方块的一次性消耗（BlockEvent.BreakEvent，仅服务端触发）。 */
     public static void handleBreakBlock(ServerPlayer player) {
-        if (player.isCreative() || player.isSpectator()) {
+        if (skipByGameMode(player)) {
             return;
         }
         float base = StaminaServerConfig.f(StaminaServerConfig.BREAK_BLOCK_COST);
@@ -244,6 +290,12 @@ public final class StaminaManager {
     }
 
     // ------------------------------------------------------------------ 直接设置（API / 指令用）
+
+    /** 创造/旁观默认不消耗；apply_in_creative=true 时照常（与 tickRules 一致）。 */
+    private static boolean skipByGameMode(ServerPlayer player) {
+        return (player.isCreative() || player.isSpectator())
+                && !StaminaServerConfig.APPLY_IN_CREATIVE.get();
+    }
 
     public static void setStamina(Player player, float value) {
         StaminaData st = StaminaData.of(player);

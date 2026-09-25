@@ -1,0 +1,11 @@
+{
+  "exhausted": {
+    "subtitle": "herra_stamina.sound.exhausted",
+    "sounds": [
+      {
+        "name": "herra_stamina:exhausted",
+        "volume": 1.0
+      }
+    ]
+  }
+}

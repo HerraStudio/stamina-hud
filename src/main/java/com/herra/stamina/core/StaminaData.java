@@ -97,9 +97,13 @@ public class StaminaData {
         return stamina >= getMaxStamina() - 1.0e-4F;
     }
 
-    /** 低体力禁跑判定（服务端权威，同时同步给客户端镜像处理）。 */
+    /** 低体力禁跑判定（服务端权威，同时同步给客户端镜像处理）。
+     * 透支期间的禁跑受 penalty.exhausted_block_sprint 配置控制（严格模式）。 */
     public boolean isSprintBlocked() {
-        return exhaustedLock || stamina <= StaminaServerConfig.f(StaminaServerConfig.SPRINT_STOP_THRESHOLD);
+        if (exhaustedLock) {
+            return StaminaServerConfig.EXHAUSTED_BLOCK_SPRINT.get();
+        }
+        return stamina <= StaminaServerConfig.f(StaminaServerConfig.SPRINT_STOP_THRESHOLD);
     }
 
     public int getTicksSinceConsumption() {

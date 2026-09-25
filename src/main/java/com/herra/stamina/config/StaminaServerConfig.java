@@ -32,6 +32,9 @@ public final class StaminaServerConfig {
     public static final ModConfigSpec.DoubleValue SPRINT_STOP_THRESHOLD;
     public static final ModConfigSpec.DoubleValue EXHAUSTED_RELEASE_THRESHOLD;
     public static final ModConfigSpec.BooleanValue EXHAUSTED_BLOCK_JUMP;
+    public static final ModConfigSpec.BooleanValue EXHAUSTED_BLOCK_SPRINT;
+    public static final ModConfigSpec.DoubleValue EXHAUSTED_WALK_SLOWDOWN;
+    public static final ModConfigSpec.BooleanValue WINDED_BLOCK_JUMP;
 
     public static final ModConfigSpec.IntValue SYNC_INTERVAL_TICKS;
     public static final ModConfigSpec.DoubleValue SYNC_DELTA;
@@ -74,6 +77,12 @@ public final class StaminaServerConfig {
                 .defineInRange("exhausted_release_threshold", 30.0, 0.0, 1_000_000.0);
         EXHAUSTED_BLOCK_JUMP = b.comment("体力透支（归零）期间是否禁止跳跃", "通过 JUMP_STRENGTH 属性修饰符实现（同步到客户端，无橡皮筋）；", "透支期跳跃药水仍有 0.1/级 的微弱弹跳（原版公式加算，可忽略）")
                 .define("exhausted_block_jump", true);
+        EXHAUSTED_BLOCK_SPRINT = b.comment("体力透支（归零）期间是否禁止疾跑（严格模式核心开关）", "开启时透支玩家只能正常行走；关闭则仅保留低体力禁跑阈值")
+                .define("exhausted_block_sprint", true);
+        EXHAUSTED_WALK_SLOWDOWN = b.comment("透支期间行走减速比例（0 = 不减速，只能正常行走；0.15 = 移速 x0.85）", "通过 MOVEMENT_SPEED 属性修饰符实现，仅影响地面移速，不影响击退/坠落")
+                .defineInRange("exhausted_walk_slowdown", 0.0, 0.0, 0.6);
+        WINDED_BLOCK_JUMP = b.comment("低体力（低于禁跑阈值但未透支）时是否也禁止跳跃（默认关闭：保留最后一跳的战术逃生空间）")
+                .define("winded_block_jump", false);
         b.pop();
         b.push("network").comment("同步节流（一般无需修改）");
         SYNC_INTERVAL_TICKS = b.comment("数值变化时的最小同步间隔（tick）")

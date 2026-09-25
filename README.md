@@ -18,7 +18,7 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 ```bash
 # 需要 JDK 21（Gradle 会按需自动下载）
 ./gradlew build
-# 产物：build/libs/herra_stamina-1.0.0.jar
+# 产物：build/libs/herra_stamina-1.0.2.jar
 ```
 
 运行环境（服务器与客户端都需）：
@@ -43,6 +43,9 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 - 创造/旁观模式不消耗；死亡重生满体力复活
 
 ## 3. HUD（LDLib2 ModularHudLayer）
+
+> v1.0.2：支持 4 种样式预设 + 0.5~2.0 整体缩放 + 默认位置上移（offset_y 84），
+> 全部可在游戏内 `/sta` 界面实时调整（见第 5 节）。
 
 - 位置：物品栏上方正中（默认距底 72px，避开自定义血条；在护甲条之上，
   不遮挡血/甲/氧/经验；`hud.offset_y` 可调，改客户端 toml 即时生效）
@@ -77,43 +80,79 @@ HERRA 搜打撤生态的独立小模组：只负责**体力系统本身**（跑/
 | penalty.sprint_stop_threshold | 15 | 低于禁跑 |
 | penalty.exhausted_release_threshold | 30 | 透支解除阈值 |
 | penalty.exhausted_block_jump | true | 透支期间禁止跳跃 |
+| penalty.exhausted_block_sprint | true | 透支期间禁止疾跑（严格模式核心开关） |
+| penalty.exhausted_walk_slowdown | 0.0 | 透支行走减速比例（0 = 只能正常行走；0.15 = 移速 x0.85） |
+| penalty.winded_block_jump | false | 低体力（未透支）也禁跳（默认保留最后一跳逃生空间） |
 | network.sync_interval_ticks / sync_delta | 2 / 2.0 | 同步节流 |
 
-**客户端 HUD 表现** `herra_stamina-client.toml`（`config/` 目录）：
-`hud.enabled / offset_x / offset_y / auto_hide / hide_delay_ticks /
-show_icon / show_body_status / show_status_text / animation_speed`；
-配色四段渐变 `colors.full / mid / low / crit`（0xRRGGBB，默认 米白→金黄→橙→红）
+**客户端 HUD 表现** `herra_stamina-client.toml`（`config/` 目录，**每个玩家各自生效**，
+游戏内 `/sta` 打开设置界面可视化调整，见第 5 节）：
+`hud.enabled / offset_x / offset_y(默认 84) / scale(0.5~2.0) / style(classic|tactical|minimal|energy) /
+auto_hide / hide_delay_ticks / show_icon / show_body_status / show_status_text / animation_speed`；
+提示音 `sound.exhausted_enabled / exhausted_volume(0~100)`；
+配色四段渐变 `colors.full / mid / low / crit`（仅「经典」样式使用）
 
 > 数值全部实时读取，无需重启；整合包可用 `defaultconfigs/` 统一发货。
 > 运行中改客户端 toml 即时生效（文件监听自动重载）。
 
 ---
 
-## 5. 游戏内调节指令 `/stamina`
+## 5. 游戏内指令与设置界面
 
-服务端 OP（权限 2）可直接在游戏里调数值，改完立即生效**并写入 TOML**
+### 5.1 `/sta` 设置界面（玩家级，调整只针对自己）
+
+输入 **`/sta`** 直接打开搜打撤风格战术设置面板（暗色军规 + 琥珀强调 +
+扫描线 + 角落括号，全代码绘制）。修改**即时生效**，关闭界面自动保存到
+本地 `config/herra-stamina-client.toml`，不影响其他玩家：
+
+- **位置调整**：拖拽小地图直接摆放体力条（含物品栏参考框、中心参考线、
+  悬停十字线），或用 水平X / 高度Y / 缩放 滑条微调；一键「居中复位」
+- **样式预设**：4 种体力条皮肤 + 动态大预览（呼吸填充 + ghost 残影）
+  - `经典 classic` 金蓝像素边框，四段渐变走配置
+  - `战术 tactical` 装甲块边框 + 硬分段刻度，军绿荧光→警示红
+  - `极简 minimal` 1px 细线边框，冷白→琥珀→红
+  - `生电 energy` 青色辉光切角 + 斜纹高光，青→紫→品红
+- **耗尽提示音**：体力归零瞬间播放低频心跳闷响；开关 + 0~100 音量滑条 +
+  「试听」按钮
+- **显示选项**：闪电图标 / 状态文字 / 身体图标 / 自动隐藏 四个 LED 开关，
+  外加动画速度滑条
+
+### 5.2 指令权限一览
+
+```text
+/sta                                   打开设置界面（玩家级）
+/sta ui                                同上（别名）
+/sta help                              指令帮助（玩家级）
+/stamina                               查看自己的体力（唯一需打全称的玩家级指令）
+```
+
+**以下子命令均挂 /sta 且需要 OP（权限 2）—— 所有涉及数值修改的指令
+一律管理员权限**，改完立即生效并写入 TOML
 （`world/serverconfig/herra-stamina-server.toml`，重启不丢）：
 
 ```text
-/stamina                                查看自己的体力
-/stamina info [player]                 查看体力（看别人需 OP）
-/stamina set <player> <value>          设置体力
-/stamina add <player> <value>          增减体力（可为负）
-/stamina exhaust <player>              清空 + 透支锁（测试低体力惩罚）
-/stamina reset <player>                回满
-/stamina modifier list [player]        生效中的修改器
-/stamina modifier clear <player>       清空修改器
-/stamina modifier give <player> <id> <seconds> [drain×] [maxBonus] [regen/s]
-                                        挂测试增益（与医药模组同路径，id 含冒号要加引号）
-/stamina config show                   列出全部服务器数值
-/stamina config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
-                 attack-cost|break-cost|regen|regen-exhausted|delay|
-                 delay-exhausted|sprint-stop|release <value>   改数值并落盘
-/stamina config block-jump <true|false>  透支是否禁跳
+/sta info <player>                     查看指定玩家体力
+/sta set <player> <value>              设置体力
+/sta add <player> <value>              增减体力（可为负）
+/sta exhaust <player>                  清空 + 透支锁（测试低体力惩罚）
+/sta reset <player>                    回满
+/sta modifier list [player]            生效中的修改器
+/sta modifier clear <player>           清空修改器
+/sta modifier give <player> <id> <seconds> [drain×] [maxBonus] [regen/s]
+                                       挂测试增益（与医药模组同路径，id 含冒号要加引号）
+/sta config show                       列出全部服务器数值
+/sta config max|sprint-drain|jump-cost|swim-drain|swim-sprint-drain|
+             attack-cost|break-cost|regen|regen-exhausted|delay|
+             delay-exhausted|sprint-stop|release <value>   改数值并落盘
+/sta config block-jump <true|false>        透支是否禁跳
+/sta config block-sprint <true|false>      透支是否禁跑（严格模式）
+/sta config walk-slowdown <0~0.6>          透支行走减速比例
+/sta config winded-block-jump <true|false> 低体力（未透支）是否禁跳
 ```
 
-示例：`/stamina config sprint-drain 8`（疾跑变慢耗）、
-`/stamina modifier give Steve "herra_med:test" 60 0.5 30 5`
+示例：`/sta config sprint-drain 8`（疾跑变慢耗）、
+`/sta config walk-slowdown 0.15`（透支移速 x0.85）、
+`/sta modifier give Steve "herra_med:test" 60 0.5 30 5`
 （60 秒：消耗减半、上限+30、恢复+5/s —— 不写代码就能验证药品接口）
 
 > 手改 TOML 同样支持：SERVER 配置文件被监听，存盘即热重载。
@@ -237,14 +276,26 @@ static void onConsume(StaminaEvent.Consume e) {
 3. 停下 1.2 秒：平滑回升；跳一下（消耗 10）→ 白闪 + 火花 + 幽灵拖尾渐变
 4. 透支后恢复到 30 → 恢复疾跑能力（`StaminaEvent.Recovered` 触发）
 5. 回满 → 扫光 → 2 秒后自动隐藏；再跑立刻淡入
-6. 确认 HUD 不遮挡自定义血条（遮挡则调 `hud.offset_y`，默认已上移到 72）
+6. 确认 HUD 不遮挡自定义血条（默认已上移到 84；遮挡则 `/sta` 拖拽微调）
 7. 游泳/疾速游泳按低速率消耗；水下跳跃不触发跳跃消耗
-8. `/stamina` 指令：`config show` / `config sprint-drain 8` 看条下降变慢并检查 TOML 已写入；
+8. `/sta` 管理指令（OP）：`config show` / `config sprint-drain 8` 看条下降变慢并检查 TOML 已写入；
    `set/add/exhaust/reset` 直接操纵体力；
-   `modifier give 自己 "test:buff" 60 0.5 30 5` 验证药品接口（消耗减半+条变长）
-9. 服务端：`./gradlew runServer` 冒烟（已在开发环境 RCON 端到端验证：19/19 通过）
+   `modifier give 自己 "test:buff" 60 0.5 30 5` 验证药品接口（消耗减半+条变长）；
+   非OP 执行应提示无权限；普通玩家 `/stamina` 只能看自己
+9. 服务端：`./gradlew runServer` 冒烟（已在开发环境 RCON 端到端验证：29/29 通过）
+10. **v1.0.2 界面**（真机）：`/sta` 打开设置面板 → 拖拽小地图摆位（HUD 实时跟随）
+    → 切 4 种样式看预览和 HUD 变化 → 拉音量 + 试听提示音 → 耗尽体力听心跳音
+    → 缩放滑条 → ESC 关闭后重进世界确认已保存
+11. **v1.0.2 透支严格性**：耗尽瞬间按住疾跑键应**立即**停跑（无 1~2 tick 窗口）；
+    恢复到 30 解锁瞬间立即可跑；`/sta config walk-slowdown 0.15` 后透支应明显变慢
 
 ## 8. 源码结构
+
+> v1.0.2 新增类：`client/gui/StaminaSettingsScreen`（设置界面 + 全套自绘
+> 战术控件）、`client/hud/BarStyle`（样式预设枚举）、`client/ClientGuiHandlers`
+> （client-only 中转，规避服务端 dist 崩溃）、`client/StaminaSounds`（提示音
+> 播放）、`core/ModSounds`（音效注册）、`network/OpenSettingsPayload`
+> （S2C 打开界面）。
 
 ```
 src/main/java/com/herra/stamina/
@@ -309,6 +360,28 @@ src/main/java/com/herra/stamina/
   修改或到期时钳制当前体力并强制重同步（HUD 条长度即时变化）
 
 ## 11. 版本记录
+
+### v1.0.2
+- **HUD 默认位置上移**：offset_y 默认 72 → 84（避开自定义血条/护甲条，
+  位于氧气条上方；`/sta` 界面可拖拽微调）
+- **`/sta` 设置界面**（玩家级，调整仅对自己生效）：暗色军规战术面板，
+  拖拽小地图摆位 + X/Y/缩放滑条 + 居中复位，全部修改即时生效、
+  关闭自动保存；指令改为短入口 `/sta`，`/stamina` 全称仅保留自查
+- **4 种体力条样式预设**：经典 / 战术（Tarkov 装甲风）/ 极简 / 生电
+  （科幻辉光），界面内点选切换 + 动态大预览
+- **体力耗尽提示音**：归零瞬间低频心跳闷响（合成音效 exhausted.ogg），
+  开关 + 0~100 音量 + 试听，全部集成在 `/sta` 界面
+- **透支惩罚收紧**：透支进入/解除瞬间改为零延迟同步（客户端立即生效，
+  消除 1~2 tick 的疾跑窗口）；新增 `exhausted_block_sprint`（透支禁跑
+  核心开关）、`exhausted_walk_slowdown`（透支减速，默认 0 = 只能正常
+  行走）、`winded_block_jump`（低体力禁跳选项）三个服务端配置
+- **权限收紧**：所有涉及数值修改的指令（set/add/exhaust/reset/
+  modifier/config/info 查他人）统一要求 OP 权限 2
+- Bug 修复：创造模式消耗一致性（跳跃/攻击/挖块现与疾跑同规则，
+  受 apply_in_creative 控制）；运行中改 walk-slowdown 配置修饰符即时
+  重挂；config 指令数值显示精度（0.15 不再显示为 0.2）；服务器专用端
+  Screen 引用 dist 崩溃（抽 ClientGuiHandlers 中转）
+- 验证：BUILD SUCCESSFUL + 服务器冒烟 29/29 RCON 用例通过
 
 ### v1.0.1
 

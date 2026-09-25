@@ -16,6 +16,10 @@ public final class ModNetworking {
                 StaminaSyncPayload.TYPE,
                 StaminaSyncPayload.STREAM_CODEC,
                 ClientPacketHandlers::handleStaminaSync);
+        registrar.playToClient(
+                OpenSettingsPayload.TYPE,
+                OpenSettingsPayload.STREAM_CODEC,
+                ClientPacketHandlers::handleOpenSettings);
     }
 
     private ModNetworking() {

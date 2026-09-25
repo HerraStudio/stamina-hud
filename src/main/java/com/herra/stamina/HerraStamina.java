@@ -3,6 +3,7 @@ package com.herra.stamina;
 import com.herra.stamina.config.StaminaClientConfig;
 import com.herra.stamina.config.StaminaServerConfig;
 import com.herra.stamina.core.ModAttachments;
+import com.herra.stamina.core.ModSounds;
 import com.herra.stamina.core.StaminaCommands;
 import com.herra.stamina.core.StaminaGameEvents;
 import com.herra.stamina.network.ModNetworking;
@@ -33,6 +34,7 @@ public class HerraStamina {
 
     public HerraStamina(IEventBus modBus, ModContainer container) {
         ModAttachments.ATTACHMENT_TYPES.register(modBus);
+        ModSounds.register(modBus);
         modBus.addListener(ModNetworking::registerPayloads);
 
         container.registerConfig(ModConfig.Type.SERVER, StaminaServerConfig.SPEC);
